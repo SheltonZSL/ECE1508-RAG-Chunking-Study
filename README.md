@@ -83,5 +83,3 @@ All hyperparameters and settings will be logged for reproducibility.
 - **Final**: Complete full experimental matrix; finalize benchmark results (EM/F1 + Recall@k/MRR), sensitivity plots, error analysis, and efficiency profiling; submit code, final report, and presentation/demo.
 
 ---
-
-## Planned Repository Structure (suggested)
