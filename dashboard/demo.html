@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG Live Demo | Ask and Inspect Evidence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;600&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./demo.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <div class="grid-overlay"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-badge">RAG</span>
+      <div>
+        <strong>Chunking Study Studio</strong>
+        <small>Live Interactive QA Experience</small>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="./index.html">Dashboard</a>
+      <a href="./demo.html" class="active">Interactive Demo</a>
+    </nav>
+  </header>
+
+  <main class="container demo-container">
+    <section class="hero demo-hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Live Inference Interface</p>
+        <h1>Ask Any Question and Audit What the RAG System Retrieved</h1>
+        <p class="lead">
+          This page is built for presentation: input controls on the left, answer + evidence tracing on the right.
+        </p>
+      </div>
+      <aside class="hero-side">
+        <article class="signal-card">
+          <header>
+            <h3>Service Health</h3>
+            <span id="demoHealth" class="status status-warn">Checking...</span>
+          </header>
+          <dl>
+            <div>
+              <dt>Config</dt>
+              <dd id="activeConfig">-</dd>
+            </div>
+            <div>
+              <dt>Backends</dt>
+              <dd id="availableBackends">-</dd>
+            </div>
+            <div>
+              <dt>Strategies</dt>
+              <dd id="availableStrategies">-</dd>
+            </div>
+          </dl>
+        </article>
+      </aside>
+    </section>
+
+    <section class="demo-layout">
+      <article class="panel input-panel">
+        <div class="section-head">
+          <h2>Query Control Deck</h2>
+          <p id="demoStatus">Ready</p>
+        </div>
+
+        <div class="preset-wrap">
+          <p>Prompt Starters</p>
+          <div id="promptChips" class="prompt-chips"></div>
+        </div>
+
+        <form id="askForm" class="ask-form">
+          <label class="wide">
+            Question
+            <textarea id="questionInput" rows="4" placeholder="Example: Who discovered penicillin?"></textarea>
+          </label>
+
+          <label>
+            Backend
+            <select id="backendInput">
+              <option value="dense">dense</option>
+              <option value="bm25">bm25</option>
+            </select>
+          </label>
+
+          <label>
+            Chunking Strategy
+            <select id="strategyInput">
+              <option value="fixed">fixed</option>
+              <option value="structure">structure</option>
+              <option value="adaptive">adaptive</option>
+            </select>
+          </label>
+
+          <label>
+            Chunk Size
+            <input id="chunkSizeInput" type="number" min="32" max="1024" value="256">
+          </label>
+
+          <label>
+            Overlap
+            <input id="overlapInput" type="number" min="0" max="512" value="32">
+          </label>
+
+          <label>
+            Top-k
+            <input id="topKInput" type="number" min="1" max="20" value="5">
+          </label>
+
+          <label class="wide">
+            Config Path
+            <input id="configInput" type="text" value="configs/portable_interactive.yaml">
+          </label>
+
+          <label class="checkbox wide">
+            <input id="generateInput" type="checkbox" checked>
+            Run answer generation (Flan-T5) in addition to retrieval.
+          </label>
+
+          <div class="form-actions wide">
+            <button id="askBtn" type="submit">Run Query</button>
+            <button id="clearBtn" type="button" class="secondary">Clear Output</button>
+          </div>
+        </form>
+
+        <p class="hint">
+          Shortcut: press <code>Ctrl + Enter</code> inside the question box to run.
+        </p>
+      </article>
+
+      <article class="panel output-panel">
+        <div class="section-head">
+          <h2>Response Inspection</h2>
+          <p id="responseTag">No response yet</p>
+        </div>
+
+        <div class="metric-grid compact">
+          <article class="metric-card"><span>Retrieval Latency</span><strong id="o-retrieval-latency">-</strong></article>
+          <article class="metric-card"><span>Generation Latency</span><strong id="o-generation-latency">-</strong></article>
+          <article class="metric-card"><span>Total Latency</span><strong id="o-total-latency">-</strong></article>
+          <article class="metric-card"><span>Context Length</span><strong id="o-context-len">-</strong></article>
+        </div>
+
+        <div class="settings-shell">
+          <h3>Settings Used</h3>
+          <div id="settingsBadges" class="settings-badges"></div>
+        </div>
+
+        <article class="answer-card">
+          <header>
+            <h3>Generated Answer</h3>
+            <button id="copyAnswerBtn" type="button" class="mini-btn">Copy</button>
+          </header>
+          <pre id="answerOutput">No output yet.</pre>
+        </article>
+
+        <article class="payload-card">
+          <h3>Request Payload</h3>
+          <pre id="payloadOutput">-</pre>
+        </article>
+
+        <article>
+          <h3>Retrieved Evidence Chunks</h3>
+          <div id="hitsOutput" class="hits"></div>
+        </article>
+      </article>
+    </section>
+  </main>
+
+  <script src="./demo.js"></script>
+</body>
+</html>

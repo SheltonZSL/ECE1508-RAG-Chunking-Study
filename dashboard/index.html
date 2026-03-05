@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG Chunking Study | Showcase Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;600&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <div class="grid-overlay"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-badge">RAG</span>
+      <div>
+        <strong>Chunking Study Studio</strong>
+        <small>ECE1508 Demonstration Frontend</small>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="./index.html" class="active">Dashboard</a>
+      <a href="./demo.html">Interactive Demo</a>
+      <a href="/results/README.md" target="_blank" rel="noreferrer">Results Guide</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <div class="hero-copy stagger">
+        <p class="eyebrow">Research Demonstration</p>
+        <h1>How Chunking Strategy Changes Retrieval and Final QA Accuracy</h1>
+        <p class="lead">
+          This dashboard visualizes your RAG experiment outcomes with clear tradeoffs between quality, ranking behavior, and latency.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="./demo.html">Launch Live Interactive Demo</a>
+          <a class="btn btn-ghost" href="#lab">Inspect Experiment Matrix</a>
+        </div>
+        <div class="chip-row">
+          <span>Frozen Models</span>
+          <span>Dense + BM25</span>
+          <span>EM / F1 / Recall@k / MRR</span>
+          <span>Chunking Ablations</span>
+        </div>
+      </div>
+
+      <aside class="hero-side stagger delay-1">
+        <article class="signal-card">
+          <header>
+            <h3>Live Data Status</h3>
+            <span id="dataStatus" class="status status-warn">Loading files...</span>
+          </header>
+          <dl>
+            <div>
+              <dt>Metrics source</dt>
+              <dd id="metricsSource">-</dd>
+            </div>
+            <div>
+              <dt>Matrix source</dt>
+              <dd id="matrixSource">-</dd>
+            </div>
+            <div>
+              <dt>Unique backends</dt>
+              <dd id="uniqueBackends">-</dd>
+            </div>
+          </dl>
+        </article>
+        <article class="signal-card subtle">
+          <h3>What You Are Showing</h3>
+          <p>A controllable RAG stack where chunk design is treated as the core independent variable.</p>
+        </article>
+      </aside>
+    </section>
+
+    <section class="panel stagger delay-2">
+      <div class="section-head">
+        <h2>Pipeline Blueprint</h2>
+        <p>From corpus ingestion to quantitative conclusions.</p>
+      </div>
+      <div class="pipeline-track">
+        <article>
+          <span>01</span>
+          <h3>Corpus + Questions</h3>
+          <p>Load benchmark queries and build retrieval corpus.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>Chunking Layer</h3>
+          <p>Fixed, structure-aware, and adaptive segmentation.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>Retriever</h3>
+          <p>Dense FAISS index or BM25 sparse baseline.</p>
+        </article>
+        <article>
+          <span>04</span>
+          <h3>Generator</h3>
+          <p>Answer generation conditioned on retrieved chunks.</p>
+        </article>
+        <article>
+          <span>05</span>
+          <h3>Evaluation</h3>
+          <p>EM/F1, Recall@k, MRR, latency, and context usage.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel stagger delay-3">
+      <div class="section-head">
+        <h2>Performance Snapshot</h2>
+        <p>Instant summary of your current experiment set.</p>
+      </div>
+      <div class="metric-grid">
+        <article class="metric-card">
+          <span>Baseline EM</span>
+          <strong id="m-em">-</strong>
+        </article>
+        <article class="metric-card">
+          <span>Baseline F1</span>
+          <strong id="m-f1">-</strong>
+        </article>
+        <article class="metric-card">
+          <span>Baseline Recall@k</span>
+          <strong id="m-recall">-</strong>
+        </article>
+        <article class="metric-card">
+          <span>Baseline MRR</span>
+          <strong id="m-mrr">-</strong>
+        </article>
+        <article class="metric-card">
+          <span>Total Runs</span>
+          <strong id="m-runs">-</strong>
+        </article>
+        <article class="metric-card">
+          <span>Best Composite Score</span>
+          <strong id="m-best-score">-</strong>
+        </article>
+        <article class="metric-card">
+          <span>Best Config</span>
+          <strong id="m-best-config">-</strong>
+        </article>
+        <article class="metric-card">
+          <span>Fastest Config Latency</span>
+          <strong id="m-best-latency">-</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel stagger delay-4" id="lab">
+      <div class="section-head">
+        <h2>Experiment Lab</h2>
+        <p>Filter, rank, and inspect every run in one place.</p>
+      </div>
+
+      <div class="filter-bar">
+        <label>
+          Backend
+          <select id="backendFilter"></select>
+        </label>
+        <label>
+          Strategy
+          <select id="strategyFilter"></select>
+        </label>
+        <label>
+          Sort By
+          <select id="sortFilter">
+            <option value="composite_score">Composite Score (desc)</option>
+            <option value="recall_at_k">Recall@k (desc)</option>
+            <option value="mrr">MRR (desc)</option>
+            <option value="f1">F1 (desc)</option>
+            <option value="avg_query_latency_ms">Latency (asc)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="chart-layout">
+        <article class="chart-panel">
+          <h3>Recall@k vs Top-k</h3>
+          <canvas id="recallChart" width="860" height="340"></canvas>
+        </article>
+        <article class="chart-panel">
+          <h3>MRR vs Chunk Size</h3>
+          <canvas id="mrrChart" width="860" height="340"></canvas>
+        </article>
+      </div>
+
+      <div class="table-shell">
+        <table id="runsTable">
+          <thead>
+            <tr>
+              <th>backend</th>
+              <th>strategy</th>
+              <th>chunk</th>
+              <th>overlap</th>
+              <th>top_k</th>
+              <th>recall@k</th>
+              <th>mrr</th>
+              <th>f1</th>
+              <th>latency(ms)</th>
+              <th>score</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel stagger delay-5">
+      <div class="section-head">
+        <h2>Auto Findings Board</h2>
+        <p>Quick narrative from your current matrix without manual math.</p>
+      </div>
+      <div class="findings-layout">
+        <article>
+          <h3>Top Config Per Strategy</h3>
+          <div id="championGrid" class="champion-grid"></div>
+        </article>
+        <article>
+          <h3>Interpretation Notes</h3>
+          <ul id="insightList" class="insight-list"></ul>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

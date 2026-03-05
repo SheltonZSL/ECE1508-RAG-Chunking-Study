@@ -1,0 +1,53 @@
+dataset:
+  query_dataset: nq_open
+  query_split: validation
+  corpus_dataset: local_demo
+  corpus_config: null
+  corpus_split: train
+  corpus_streaming: false
+  max_queries: 50
+  max_corpus_docs: 200
+  data_dir: data/demo
+
+retriever:
+  backend: bm25
+  model_name: ""
+  batch_size: 16
+  normalize_embeddings: false
+  device: cpu
+  index_dir: data/indexes
+
+generator:
+  model_name: ""
+  fallback_model_name: ""
+  max_new_tokens: 64
+  temperature: 0.0
+  device: cpu
+
+chunking:
+  strategy: fixed
+  tokenizer_name: ""
+  chunk_size: 80
+  overlap: 12
+  min_chunk_size: 40
+  max_chunk_size: 120
+
+retrieval:
+  top_k: 5
+
+eval:
+  max_eval_queries: 50
+  compute_efficiency: true
+
+run:
+  experiment_name: portable_interactive
+  seed: 42
+  save_predictions: true
+  results_dir: results
+  matrix:
+    backends: [bm25]
+    strategies: [fixed]
+    chunk_sizes: [80]
+    overlaps: [12]
+    top_ks: [5]
+

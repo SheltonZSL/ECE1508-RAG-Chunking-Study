@@ -1,0 +1,12 @@
+{"query_id":"q1","question":"Who discovered penicillin?","answers":["Alexander Fleming","Fleming"],"metadata":{"source":"demo"}}
+{"query_id":"q2","question":"What is the capital of Japan?","answers":["Tokyo"],"metadata":{"source":"demo"}}
+{"query_id":"q3","question":"When was the first iPhone announced?","answers":["2007"],"metadata":{"source":"demo"}}
+{"query_id":"q4","question":"Which planet is known as the Red Planet?","answers":["Mars"],"metadata":{"source":"demo"}}
+{"query_id":"q5","question":"What is the capital of Canada?","answers":["Ottawa"],"metadata":{"source":"demo"}}
+{"query_id":"q6","question":"Who created Python programming language?","answers":["Guido van Rossum","van Rossum"],"metadata":{"source":"demo"}}
+{"query_id":"q7","question":"In what year did World War II end?","answers":["1945"],"metadata":{"source":"demo"}}
+{"query_id":"q8","question":"Who painted the Mona Lisa?","answers":["Leonardo da Vinci","da Vinci"],"metadata":{"source":"demo"}}
+{"query_id":"q9","question":"Who is credited with the periodic table?","answers":["Dmitri Mendeleev","Mendeleev"],"metadata":{"source":"demo"}}
+{"query_id":"q10","question":"At what temperature does water boil in Celsius?","answers":["100","100 degrees Celsius"],"metadata":{"source":"demo"}}
+{"query_id":"q11","question":"Who invented basketball?","answers":["James Naismith","Naismith"],"metadata":{"source":"demo"}}
+{"query_id":"q12","question":"When did Apollo 11 land on the Moon?","answers":["1969"],"metadata":{"source":"demo"}}

@@ -1,85 +1,185 @@
-# RAG Chunking Study: How Document Splitting Affects Deep Retrieval-Augmented QA
+# ECE1508 RAG Chunking Study
 
-## Overview
-This project studies a key design choice in Retrieval-Augmented Generation (RAG): **chunking** (how we split documents into passages before retrieval). We build a simple RAG question-answering system using **frozen pre-trained deep learning models** (a neural retriever + a generator) and run controlled experiments to answer:
+A reproducible RAG experiment framework for one core question:
 
-> **How does the way we split documents into chunks change retrieval accuracy and final QA accuracy?**
+**How do chunking choices change retrieval quality and final QA quality in a frozen-model pipeline?**
 
-We will implement multiple chunking strategies, compare against at least one standard public/reference RAG configuration, and produce **reproducible results and analysis**.
+## 1) What this project includes
+- Dense retrieval: `intfloat/e5-base-v2` + FAISS (`IndexFlatIP`)
+- Sparse retrieval baseline: BM25 (`rank-bm25`)
+- Generator: `google/flan-t5-base` (fallback to `google/flan-t5-small`)
+- Chunking strategies: `fixed`, `structure`, `adaptive`
+- Metrics: `EM`, `F1`, `Recall@k`, `MRR`, latency
+- Frontend demo dashboard + live QA page
 
----
+No training or fine-tuning is used.
 
-## Objective
-Build a RAG QA pipeline (frozen models only) and evaluate how chunking affects:
-- retrieval quality (can we retrieve the right evidence?)
-- end-to-end QA quality (does the system answer correctly?)
-- efficiency (latency/context usage)
+## 2) Quick start (recommended)
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
 
----
+Environment requirements:
+- Python `3.10+` (recommended: `3.10` or `3.11`)
+- OS: Windows/macOS/Linux
+- For instant interactive mode: CPU is enough
+- For full dense + generation experiments: GPU is recommended but optional
 
-## Motivation
-Modern QA systems often use deep learning models in two stages:
-1. **Neural retriever**: embeds the question and document chunks into vectors and retrieves the most relevant chunks.
-2. **Generator (LLM/seq2seq)**: reads retrieved chunks and generates the answer.
+### Step A (Instant Interactive, zero data prep)
+```bash
+python scripts/serve_dashboard.py --config configs/portable_interactive.yaml --open
+```
 
-In practice, **chunking is critical**:
-- chunks too small → lose context, retrieval may miss necessary information
-- chunks too large → retrieval becomes noisy, wastes context window
+This mode uses bundled demo data (`data/demo`) + BM25 retrieval.
+No dataset download, no index prebuild required.
 
-Since we will **not train or fine-tune** any model, our contribution focuses on **deep-learning-driven system behavior**: we treat retriever and generator as fixed deep models and systematically analyze how chunking changes performance, robustness, and efficiency.
+### Step B (Full experiment mode): Prepare data (lite mode)
+```bash
+python scripts/prepare_data.py --config configs/baseline_lite.yaml
+```
 
----
+### Step C (Full experiment mode): Build index
+```bash
+python scripts/build_index.py --config configs/baseline_lite.yaml
+```
 
-## Requirements
-### 1) Deep-learning-based RAG pipeline (frozen models only)
-Implement an end-to-end pipeline with:
-- document ingestion
-- chunking
-- neural dense retrieval (**bi-encoder embeddings + FAISS**)
-- answer generation using a pre-trained model
+### Step D (Full experiment mode): Run baseline QA eval
+```bash
+python scripts/run_qa_eval.py --config configs/baseline_lite.yaml
+```
 
-Provide scripts to reproduce:
-- indexing
-- retrieval
-- QA evaluation
+### Step E: Open frontend
+```bash
+python scripts/serve_dashboard.py --config configs/baseline_lite.yaml --open
+```
 
-### 2) Chunking methods (core design space)
-Implement and compare at least three chunking strategies:
-- **Fixed-length token chunks** (optional overlap)
-- **Structure-based chunks** (paragraph/heading boundaries)
-- **Adaptive chunks** (variable size using simple rules such as punctuation/sentence boundaries and length limits)
+Open:
+- `http://127.0.0.1:8000/dashboard/`
+- `http://127.0.0.1:8000/dashboard/demo.html`
 
-### 3) Comparison to existing implementation(s)
-Benchmark against at least one **standard public/reference RAG configuration**
-(default chunking + dense retrieval), and include a classic baseline (**BM25/TF-IDF**) when feasible.
+## 3) Config choices
+- `configs/baseline_lite.yaml`:
+  - Smaller, disk-friendly corpus setup
+  - Best for demos and quick iteration
+- `configs/baseline_dense.yaml`:
+  - Heavier setup (`wiki_dpr`)
+  - Better for full-size study runs
+- `configs/baseline_bm25.yaml`:
+  - BM25 baseline config
+- `configs/baseline_lite_bm25_only.yaml`:
+  - BM25 matrix on lite corpus
+- `configs/portable_interactive.yaml`:
+  - Clone-and-run interactive demo mode
+  - Uses bundled local demo corpus, no prep step
 
-### 4) Detailed experimental analysis (required since no training)
-Run controlled ablations on:
-- chunk size
-- overlap
-- top-k retrieval
-- chunking strategy
+## 4) Main commands
+- Prepare data:
+```bash
+python scripts/prepare_data.py --config <config_path>
+```
+- Build index:
+```bash
+python scripts/build_index.py --config <config_path> [--force-rebuild]
+```
+- Retrieval-only eval:
+```bash
+python scripts/run_retrieval_eval.py --config <config_path> [--force-rebuild]
+```
+- End-to-end QA eval:
+```bash
+python scripts/run_qa_eval.py --config <config_path> [--force-rebuild]
+```
+- Matrix experiments:
+```bash
+python scripts/run_experiments.py --config <config_path> [--limit N] [--skip-qa] [--force-rebuild]
+```
 
-Optionally evaluate:
-- reranking vs no reranking
+## 5) Output contract
+Each run writes:
+- `results/{exp_name}/metrics.json`
+- `results/{exp_name}/predictions.jsonl`
+- `results/{exp_name}/retrieval_hits.jsonl`
+- `results/{exp_name}/error_analysis.md`
 
-Include:
-- quantitative results
-- qualitative error analysis with representative examples
+For cleaner presentation, you can reorganize outputs into:
+- `results/runs/`
+- `results/summaries/`
+- `results/analysis/{dense,bm25}/`
 
-### 5) Metrics and reporting (clear and minimal)
-Use a public QA benchmark (e.g., **TriviaQA** or **NaturalQuestions**) and report:
-- QA quality: **Exact Match (EM)** and **F1**
-- Retrieval quality: **Recall@k** and **MRR**
-- Efficiency (optional but recommended): average query latency and context length usage
+Command:
+```bash
+python scripts/organize_results.py
+```
 
-All hyperparameters and settings will be logged for reproducibility.
+Indexes/chunks are stored under:
+- `data/indexes/{index_name}/...`
 
----
+## 6) Project structure map
+```text
+ECE1508-RAG-Chunking-Study/
+|- configs/                 # experiment YAMLs (7 fixed sections)
+|- dashboard/               # frontend dashboard + interactive demo
+|- data/
+|  |- processed/            # prepared queries/corpus jsonl (ignored by git)
+|  |- indexes/              # FAISS/BM25 artifacts + chunks (ignored by git)
+|- results/                 # experiment outputs and analysis (ignored by git)
+|- scripts/                 # runnable CLI entrypoints
+|- src/
+|  |- config/               # config dataclasses + loader
+|  |- data/                 # NQ + corpus preparation
+|  |- chunking/             # fixed / structure / adaptive chunkers
+|  |- retrieval/            # dense + bm25 retrievers
+|  |- generation/           # HF generator wrapper
+|  |- pipeline/             # orchestration + shared types
+|  |- eval/                 # QA/retrieval metrics + reporting
+|  |- utils/                # io, seed, text helpers
+|- tests/                   # unit + smoke tests
+|- requirements.txt
+|- README.md
+```
 
-## Milestones
-- **Week 5**: Select dataset/corpus; set up repo and baseline RAG pipeline (default chunking + dense retrieval); confirm at least one reference implementation/configuration for comparison.
-- **Week 10**: Implement all chunking methods; produce an initial benchmark table (baseline vs ≥2 chunking variants) and at least one ablation result (e.g., chunk size or overlap).
-- **Final**: Complete full experimental matrix; finalize benchmark results (EM/F1 + Recall@k/MRR), sensitivity plots, error analysis, and efficiency profiling; submit code, final report, and presentation/demo.
+Detailed structure notes:
+- `docs/PROJECT_STRUCTURE.md`
 
----
+## 7) Common confusion (important)
+- Matrix mode can be slow because it runs many combinations.
+- Dense index files are large (tens of MB each). This is expected.
+- `data/` and `results/` are intentionally not uploaded to GitHub.
+- Teammates should run the same scripts locally to regenerate data/index/results.
+- If you have old matrix runs, you may have duplicated legacy index folders with `_k*` suffix.
+  - Dry run:
+  ```bash
+  python scripts/cleanup_legacy_indexes.py
+  ```
+  - Apply deletion:
+  ```bash
+  python scripts/cleanup_legacy_indexes.py --apply
+  ```
+
+## 8) Recent framework improvements
+- Dashboard now merges multiple matrix summary files (Dense + BM25 can be shown together).
+- Matrix runner now reuses one index for multiple `top_k` settings, reducing duplicated index files and runtime.
+- Latency metrics now reflect real retrieval/end-to-end timing instead of metric-computation overhead.
+
+## 9) Post-v1: planned modifications and additions
+The current version is submission-ready for an initial release. The following items are planned next:
+
+- Add one-click setup scripts:
+  - `scripts/setup_portable.py` for instant interactive mode
+  - `scripts/setup_full.py` for full experiment mode
+- Add run metadata logging:
+  - output `run_manifest.json` with config snapshot, timestamp, git commit, dependency versions, and device info
+- Add frontend side-by-side comparison mode:
+  - compare Config A vs Config B answer, evidence hits, and latency in one screen
+- Add final report auto-builder:
+  - `scripts/build_final_report.py` to export `results/analysis/final_report.md` and `comparison_table.csv`
+- Add API smoke tests:
+  - verify `/api/defaults`, `/api/examples`, `/api/ask` for basic reliability
+- Add statistical confidence reporting:
+  - bootstrap confidence intervals for EM/F1/Recall@k/MRR
+- Add optional reranker switch:
+  - keep default off, support controlled reranker vs no-reranker comparison
+- Add dashboard export feature:
+  - export current filtered runs as CSV/JSON for presentation and report use

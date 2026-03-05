@@ -1,0 +1,52 @@
+dataset:
+  query_dataset: nq_open
+  query_split: validation
+  corpus_dataset: wiki_dpr
+  corpus_config: psgs_w100.nq.exact
+  corpus_split: train
+  corpus_streaming: false
+  max_queries: 200
+  max_corpus_docs: 5000
+  data_dir: data/processed
+
+retriever:
+  backend: bm25
+  model_name: intfloat/e5-base-v2
+  batch_size: 16
+  normalize_embeddings: true
+  device: auto
+  index_dir: data/indexes
+
+generator:
+  model_name: google/flan-t5-base
+  fallback_model_name: google/flan-t5-small
+  max_new_tokens: 64
+  temperature: 0.0
+  device: auto
+
+chunking:
+  strategy: fixed
+  tokenizer_name: intfloat/e5-base-v2
+  chunk_size: 256
+  overlap: 32
+  min_chunk_size: 80
+  max_chunk_size: 220
+
+retrieval:
+  top_k: 5
+
+eval:
+  max_eval_queries: 100
+  compute_efficiency: true
+
+run:
+  experiment_name: baseline_bm25
+  seed: 42
+  save_predictions: true
+  results_dir: results
+  matrix:
+    backends: [dense, bm25]
+    strategies: [fixed, structure, adaptive]
+    chunk_sizes: [128, 256, 384]
+    overlaps: [0, 32, 64]
+    top_ks: [3, 5, 10]

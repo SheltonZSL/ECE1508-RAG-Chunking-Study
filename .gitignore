@@ -1,0 +1,22 @@
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local runtime outputs
+data/raw/
+data/processed/
+data/indexes/
+results/*
+!results/.gitkeep
+
+# IDE
+.idea/
+.vscode/
