@@ -98,24 +98,28 @@ def _render_summary_markdown(
     lines.append("")
     lines.append("## Best Retrieval Config By Backend")
     lines.append("")
-    lines.append("| backend | strategy | chunk_size | overlap | top_k | recall@k | mrr | latency_ms |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append(
+        "| backend | strategy | reranker | chunk_size | overlap | top_k | recall@k | mrr | latency_ms |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
     for backend, row in best_backend.items():
         lines.append(
             "| "
-            + f"{backend} | {row.get('strategy')} | {row.get('chunk_size')} | {row.get('overlap')} | "
+            + f"{backend} | {row.get('strategy')} | {row.get('reranker_enabled', False)} | "
+            + f"{row.get('chunk_size')} | {row.get('overlap')} | "
             + f"{row.get('top_k')} | {round(_to_float(row.get('recall_at_k')), 4)} | "
             + f"{round(_to_float(row.get('mrr')), 4)} | {round(_to_float(row.get('avg_query_latency_ms')), 4)} |"
         )
     lines.append("")
     lines.append("## Recommended QA Candidate Runs")
     lines.append("")
-    lines.append("| rank | backend | strategy | chunk_size | overlap | top_k | score |")
-    lines.append("|---:|---|---|---:|---:|---:|---:|")
+    lines.append("| rank | backend | strategy | reranker | chunk_size | overlap | top_k | score |")
+    lines.append("|---:|---|---|---:|---:|---:|---:|---:|")
     for idx, row in enumerate(candidates, start=1):
         lines.append(
             "| "
-            + f"{idx} | {row.get('backend')} | {row.get('strategy')} | {row.get('chunk_size')} | "
+            + f"{idx} | {row.get('backend')} | {row.get('strategy')} | {row.get('reranker_enabled', False)} | "
+            + f"{row.get('chunk_size')} | "
             + f"{row.get('overlap')} | {row.get('top_k')} | {round(_to_float(row.get('selection_score')), 4)} |"
         )
     lines.append("")
@@ -157,6 +161,10 @@ def main() -> None:
         [
             "backend",
             "strategy",
+            "reranker_enabled",
+            "reranker_type",
+            "reranker_candidate_k",
+            "reranker_alpha",
             "chunk_size",
             "overlap",
             "top_k",
@@ -169,33 +177,56 @@ def main() -> None:
         ],
     )
 
-    by_strategy = _aggregate_mean(rows, ["backend", "strategy"])
+    by_strategy = _aggregate_mean(rows, ["backend", "strategy", "reranker_enabled"])
     by_strategy.sort(key=lambda x: (_to_float(x.get("recall_at_k")), _to_float(x.get("mrr"))), reverse=True)
     _write_csv(
         out_dir / "retrieval_by_strategy.csv",
         by_strategy,
-        ["backend", "strategy", "count", "recall_at_k", "mrr", "avg_query_latency_ms", "em", "f1"],
+        [
+            "backend",
+            "strategy",
+            "reranker_enabled",
+            "count",
+            "recall_at_k",
+            "mrr",
+            "avg_query_latency_ms",
+            "em",
+            "f1",
+        ],
     )
 
-    by_topk = _aggregate_mean(rows, ["backend", "strategy", "top_k"])
+    by_topk = _aggregate_mean(rows, ["backend", "strategy", "reranker_enabled", "top_k"])
     by_topk.sort(
         key=lambda x: (
             str(x.get("backend")),
             str(x.get("strategy")),
+            str(x.get("reranker_enabled", False)),
             _to_float(x.get("top_k")),
         )
     )
     _write_csv(
         out_dir / "retrieval_by_topk.csv",
         by_topk,
-        ["backend", "strategy", "top_k", "count", "recall_at_k", "mrr", "avg_query_latency_ms", "em", "f1"],
+        [
+            "backend",
+            "strategy",
+            "reranker_enabled",
+            "top_k",
+            "count",
+            "recall_at_k",
+            "mrr",
+            "avg_query_latency_ms",
+            "em",
+            "f1",
+        ],
     )
 
-    by_chunk_size = _aggregate_mean(rows, ["backend", "strategy", "chunk_size"])
+    by_chunk_size = _aggregate_mean(rows, ["backend", "strategy", "reranker_enabled", "chunk_size"])
     by_chunk_size.sort(
         key=lambda x: (
             str(x.get("backend")),
             str(x.get("strategy")),
+            str(x.get("reranker_enabled", False)),
             _to_float(x.get("chunk_size")),
         )
     )
@@ -205,6 +236,7 @@ def main() -> None:
         [
             "backend",
             "strategy",
+            "reranker_enabled",
             "chunk_size",
             "count",
             "recall_at_k",
@@ -222,6 +254,10 @@ def main() -> None:
         [
             "backend",
             "strategy",
+            "reranker_enabled",
+            "reranker_type",
+            "reranker_candidate_k",
+            "reranker_alpha",
             "chunk_size",
             "overlap",
             "top_k",
@@ -254,4 +290,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

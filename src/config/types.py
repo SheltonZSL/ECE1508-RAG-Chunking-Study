@@ -61,6 +61,10 @@ class GeneratorConfig:
 @dataclass
 class RetrievalConfig:
     top_k: int = 5
+    reranker_enabled: bool = False
+    reranker_type: str = "overlap"
+    reranker_candidate_k: int = 20
+    reranker_alpha: float = 0.5
 
 
 @dataclass
@@ -101,6 +105,14 @@ class PipelineConfig:
         self.chunking.validate()
         if self.retrieval.top_k <= 0:
             raise ValueError("retrieval.top_k must be > 0")
+        if self.retrieval.reranker_candidate_k <= 0:
+            raise ValueError("retrieval.reranker_candidate_k must be > 0")
+        if not (0.0 <= self.retrieval.reranker_alpha <= 1.0):
+            raise ValueError("retrieval.reranker_alpha must be in [0, 1]")
+        if self.retrieval.reranker_enabled:
+            reranker_type = self.retrieval.reranker_type.lower().strip()
+            if reranker_type not in {"overlap"}:
+                raise ValueError("retrieval.reranker_type must be one of: overlap")
         if self.retriever.batch_size <= 0:
             raise ValueError("retriever.batch_size must be > 0")
         if self.generator.max_new_tokens <= 0:

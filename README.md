@@ -29,30 +29,26 @@ Environment requirements:
 
 ### Step A (Instant Interactive, zero data prep)
 ```bash
-python scripts/serve_dashboard.py --config configs/portable_interactive.yaml --open
+python scripts/setup_portable.py --open
 ```
 
 This mode uses bundled demo data (`data/demo`) + BM25 retrieval.
 No dataset download, no index prebuild required.
+In this mode, `run_qa_eval.py` also works without loading an HF generator model (fallback answer from retrieved evidence).
 
 ### Step B (Full experiment mode): Prepare data (lite mode)
 ```bash
-python scripts/prepare_data.py --config configs/baseline_lite.yaml
+python scripts/setup_full.py
 ```
 
-### Step C (Full experiment mode): Build index
+### Step C (Full experiment mode): Run baseline QA eval (optional)
 ```bash
-python scripts/build_index.py --config configs/baseline_lite.yaml
+python scripts/setup_full.py --run-qa
 ```
 
-### Step D (Full experiment mode): Run baseline QA eval
+### Step D: Open frontend in full mode
 ```bash
-python scripts/run_qa_eval.py --config configs/baseline_lite.yaml
-```
-
-### Step E: Open frontend
-```bash
-python scripts/serve_dashboard.py --config configs/baseline_lite.yaml --open
+python scripts/setup_full.py --serve --open
 ```
 
 Open:
@@ -63,6 +59,8 @@ Open:
 - `configs/baseline_lite.yaml`:
   - Smaller, disk-friendly corpus setup
   - Best for demos and quick iteration
+- `configs/baseline_lite_reranker.yaml`:
+  - Lite setup with reranker enabled for controlled reranker-vs-baseline comparison
 - `configs/baseline_dense.yaml`:
   - Heavier setup (`wiki_dpr`)
   - Better for full-size study runs
@@ -75,6 +73,14 @@ Open:
   - Uses bundled local demo corpus, no prep step
 
 ## 4) Main commands
+- One-click portable setup + serve:
+```bash
+python scripts/setup_portable.py [--install-deps] [--open]
+```
+- One-click full setup (+ optional serve/eval):
+```bash
+python scripts/setup_full.py [--install-deps] [--run-qa] [--serve --open]
+```
 - Prepare data:
 ```bash
 python scripts/prepare_data.py --config <config_path>
@@ -95,6 +101,26 @@ python scripts/run_qa_eval.py --config <config_path> [--force-rebuild]
 ```bash
 python scripts/run_experiments.py --config <config_path> [--limit N] [--skip-qa] [--force-rebuild]
 ```
+- Reranker extension comparison (same matrix, reranker on):
+```bash
+python scripts/run_experiments.py --config configs/baseline_lite_reranker.yaml
+```
+- Build final report artifacts from matrix summaries:
+```bash
+python scripts/build_final_report.py [--results-dir results] [--out-dir results/analysis]
+```
+- Generate deeper sensitivity-analysis plots:
+```bash
+python scripts/plot_sensitivity.py --matrix-summary <summary_json_or_list...> [--out-dir results/analysis/sensitivity]
+```
+Example (baseline + reranker summary together):
+```bash
+python scripts/plot_sensitivity.py --matrix-summary results/baseline_lite_matrix_summary.json results/baseline_lite_reranker_matrix_summary.json
+```
+- API smoke tests:
+```bash
+pytest -q tests/test_api_smoke.py
+```
 
 ## 5) Output contract
 Each run writes:
@@ -102,6 +128,10 @@ Each run writes:
 - `results/{exp_name}/predictions.jsonl`
 - `results/{exp_name}/retrieval_hits.jsonl`
 - `results/{exp_name}/error_analysis.md`
+- `results/{exp_name}/run_manifest.json`
+
+For matrix suite runs, an extra suite-level manifest is written:
+- `results/{base_exp_name}_run_manifest.json`
 
 For cleaner presentation, you can reorganize outputs into:
 - `results/runs/`
@@ -158,28 +188,44 @@ Detailed structure notes:
   python scripts/cleanup_legacy_indexes.py --apply
   ```
 
+### Optional: remove `TRANSFORMERS_CACHE` deprecation warning
+The project now auto-maps deprecated `TRANSFORMERS_CACHE` to `HF_HOME` at runtime.
+If you want to clean your Windows user environment permanently, run:
+```powershell
+[Environment]::SetEnvironmentVariable("HF_HOME", "$env:USERPROFILE\\.cache\\huggingface", "User")
+[Environment]::SetEnvironmentVariable("TRANSFORMERS_CACHE", $null, "User")
+```
+Then restart your terminal.
+
 ## 8) Recent framework improvements
 - Dashboard now merges multiple matrix summary files (Dense + BM25 can be shown together).
 - Matrix runner now reuses one index for multiple `top_k` settings, reducing duplicated index files and runtime.
 - Latency metrics now reflect real retrieval/end-to-end timing instead of metric-computation overhead.
+- Every eval run now writes `run_manifest.json` (config snapshot, script args, env, git info, timing).
+- Interactive demo now supports A/B comparison (Run A vs Run B side-by-side with latency and evidence).
+- Added API smoke test coverage for `/api/health`, `/api/defaults`, `/api/examples`, `/api/ask`.
+- Added bootstrap CI fields for EM/F1/Recall@k/MRR in evaluation outputs.
+- Added dashboard export for filtered runs (CSV/JSON buttons in the Experiment Lab panel).
+- Added final report auto-builder (`scripts/build_final_report.py`) for:
+  - `results/analysis/comparison_table.csv`
+  - `results/analysis/final_report.md`
+- Added optional reranker extension (default off):
+  - config keys: `retrieval.reranker_enabled`, `reranker_type`, `reranker_candidate_k`, `reranker_alpha`
+  - supports controlled reranker/no-reranker comparison under the same retrieval backend
+- Added deeper sensitivity-analysis visualization script (`scripts/plot_sensitivity.py`) for:
+  - quality-latency tradeoff scatter
+  - top-k sensitivity curves
+  - chunk-size/overlap heatmaps
+  - markdown summary (`sensitivity_summary.md`)
+- Hardened interactive API:
+  - config path confinement to repo root
+  - backend/strategy option validation
+  - request body size limit
+  - no traceback leakage in API error responses
+- Replaced BM25 pickle deserialization with JSON-only metadata restore path.
 
 ## 9) Post-v1: planned modifications and additions
 The current version is submission-ready for an initial release. The following items are planned next:
 
-- Add one-click setup scripts:
-  - `scripts/setup_portable.py` for instant interactive mode
-  - `scripts/setup_full.py` for full experiment mode
-- Add run metadata logging:
-  - output `run_manifest.json` with config snapshot, timestamp, git commit, dependency versions, and device info
-- Add frontend side-by-side comparison mode:
-  - compare Config A vs Config B answer, evidence hits, and latency in one screen
-- Add final report auto-builder:
-  - `scripts/build_final_report.py` to export `results/analysis/final_report.md` and `comparison_table.csv`
-- Add API smoke tests:
-  - verify `/api/defaults`, `/api/examples`, `/api/ask` for basic reliability
-- Add statistical confidence reporting:
-  - bootstrap confidence intervals for EM/F1/Recall@k/MRR
-- Add optional reranker switch:
-  - keep default off, support controlled reranker vs no-reranker comparison
-- Add dashboard export feature:
-  - export current filtered runs as CSV/JSON for presentation and report use
+- Add optional API auth mode for non-local sharing scenarios:
+  - token gate for `/api/ask` when serving beyond localhost

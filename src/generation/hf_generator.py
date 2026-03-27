@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import torch
+
+from src.utils.hf_env import normalize_hf_home_env
+
+normalize_hf_home_env()
+
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from src.config.types import GeneratorConfig
@@ -77,4 +82,3 @@ class HFGenerator:
         )
         text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         return text.strip()
-

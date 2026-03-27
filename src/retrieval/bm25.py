@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import pickle
 import re
 from pathlib import Path
 
@@ -62,9 +61,8 @@ class BM25Retriever:
             raise RuntimeError("BM25Retriever has no index to save")
         root = Path(index_dir)
         root.mkdir(parents=True, exist_ok=True)
-        with (root / "bm25.model.pkl").open("wb") as handle:
-            pickle.dump(self.model, handle)
         meta = {
+            "schema_version": "2.0",
             "chunk_ids": self.chunk_ids,
             "chunk_texts": self.chunk_texts,
             "document_ids": self.document_ids,
@@ -74,11 +72,10 @@ class BM25Retriever:
 
     def load(self, index_dir: str | Path) -> None:
         root = Path(index_dir)
-        with (root / "bm25.model.pkl").open("rb") as handle:
-            self.model = pickle.load(handle)
         with (root / "bm25.meta.json").open("r", encoding="utf-8") as handle:
             meta = json.load(handle)
         self.chunk_ids = list(meta["chunk_ids"])
         self.chunk_texts = list(meta["chunk_texts"])
         self.document_ids = list(meta["document_ids"])
-
+        tokenized = [_tokenize(text) for text in self.chunk_texts]
+        self.model = BM25Okapi(tokenized)

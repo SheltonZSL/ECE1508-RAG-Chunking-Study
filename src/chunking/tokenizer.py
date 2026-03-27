@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+from src.utils.hf_env import normalize_hf_home_env
+
+normalize_hf_home_env()
+
 try:
     from transformers import AutoTokenizer
 except ImportError:  # pragma: no cover - optional at import time
@@ -36,4 +40,3 @@ class TokenizerAdapter:
 
     def token_count(self, text: str) -> int:
         return len(self.encode(text))
-

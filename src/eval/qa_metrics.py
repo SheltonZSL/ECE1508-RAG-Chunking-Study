@@ -4,6 +4,8 @@ import re
 import string
 from collections import Counter
 
+from src.eval.stats import bootstrap_mean_ci
+
 _ARTICLES_RE = re.compile(r"\b(a|an|the)\b")
 _WHITESPACE_RE = re.compile(r"\s+")
 
@@ -47,8 +49,16 @@ def best_qa_scores(prediction: str, ground_truths: list[str]) -> tuple[float, fl
 
 def compute_qa_aggregate(records: list[dict[str, float]]) -> dict[str, float]:
     if not records:
-        return {"em": 0.0, "f1": 0.0}
+        return {"em": 0.0, "f1": 0.0, "em_ci_low": 0.0, "em_ci_high": 0.0, "f1_ci_low": 0.0, "f1_ci_high": 0.0}
     em = sum(item["em"] for item in records) / len(records)
     f1 = sum(item["f1"] for item in records) / len(records)
-    return {"em": em, "f1": f1}
-
+    em_low, em_high = bootstrap_mean_ci([item["em"] for item in records])
+    f1_low, f1_high = bootstrap_mean_ci([item["f1"] for item in records])
+    return {
+        "em": em,
+        "f1": f1,
+        "em_ci_low": em_low,
+        "em_ci_high": em_high,
+        "f1_ci_low": f1_low,
+        "f1_ci_high": f1_high,
+    }

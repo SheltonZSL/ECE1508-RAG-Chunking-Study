@@ -6,6 +6,11 @@ from pathlib import Path
 import numpy as np
 import torch
 from tqdm import tqdm
+
+from src.utils.hf_env import normalize_hf_home_env
+
+normalize_hf_home_env()
+
 from transformers import AutoModel, AutoTokenizer
 
 from src.config.types import RetrieverConfig
@@ -132,4 +137,3 @@ class DenseRetriever:
         self.chunk_texts = list(meta["chunk_texts"])
         self.document_ids = list(meta["document_ids"])
         self.store = FaissStore.load(root / "dense.index.faiss")
-

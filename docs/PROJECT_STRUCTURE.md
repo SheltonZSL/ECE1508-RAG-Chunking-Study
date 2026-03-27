@@ -23,6 +23,7 @@ The runtime path is:
     - `run_retrieval_eval.py`
     - `run_qa_eval.py`
     - `run_experiments.py`
+    - `build_final_report.py`
     - `serve_dashboard.py`
 
 - `src/`
@@ -63,4 +64,3 @@ The runtime path is:
 - Current matrix runner reuses indexes across `top_k` values to reduce duplication.
 - If disk is tight, use `configs/baseline_lite.yaml` and limit matrix runs:
   - `python scripts/run_experiments.py --config configs/baseline_lite.yaml --limit 6 --skip-qa`
-

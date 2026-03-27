@@ -78,7 +78,7 @@ def build_or_load_retriever(
     retriever = _build_retriever(config)
 
     dense_ready = (root / "dense.index.faiss").exists() and (root / "dense.meta.json").exists()
-    bm25_ready = (root / "bm25.model.pkl").exists() and (root / "bm25.meta.json").exists()
+    bm25_ready = (root / "bm25.meta.json").exists()
     can_load = dense_ready if backend == "dense" else bm25_ready
 
     if can_load and not force_rebuild:
@@ -89,14 +89,41 @@ def build_or_load_retriever(
     return retriever
 
 
+def _retrieve_hits(
+    *,
+    config: PipelineConfig,
+    queries: list[Query],
+    retriever,
+    top_k: int,
+) -> list[list[RetrievalHit]]:
+    candidate_k = top_k
+    if config.retrieval.reranker_enabled:
+        candidate_k = max(top_k, config.retrieval.reranker_candidate_k)
+
+    all_hits = retriever.retrieve(queries, top_k=candidate_k)
+    if not config.retrieval.reranker_enabled:
+        return [hits[:top_k] for hits in all_hits]
+
+    from src.retrieval.reranker import rerank_hits
+
+    return rerank_hits(
+        queries=queries,
+        all_hits=all_hits,
+        reranker_type=config.retrieval.reranker_type,
+        top_k=top_k,
+        alpha=config.retrieval.reranker_alpha,
+    )
+
+
 def evaluate_retrieval(
     *,
+    config: PipelineConfig,
     queries: list[Query],
     retriever,
     top_k: int,
 ) -> tuple[list[RetrievalHit], dict[str, float]]:
     retrieval_start = time.perf_counter()
-    all_hits = retriever.retrieve(queries, top_k=top_k)
+    all_hits = _retrieve_hits(config=config, queries=queries, retriever=retriever, top_k=top_k)
     retrieval_total_ms = (time.perf_counter() - retrieval_start) * 1000.0
     flattened: list[RetrievalHit] = []
     rows: list[dict[str, float]] = []
@@ -120,11 +147,22 @@ def evaluate_qa(
     retriever,
     top_k: int,
 ) -> tuple[list[QAPrediction], list[RetrievalHit], dict[str, float]]:
-    from src.generation.hf_generator import HFGenerator
+    def fallback_prediction(contexts: list[str]) -> str:
+        if not contexts:
+            return ""
+        text = contexts[0].strip()
+        limit = 320
+        return text[:limit] + ("..." if len(text) > limit else "")
 
-    generator = HFGenerator(config.generator)
+    model_name = str(config.generator.model_name).strip()
+    use_generator = bool(model_name)
+    generator = None
+    if use_generator:
+        from src.generation.hf_generator import HFGenerator
+
+        generator = HFGenerator(config.generator)
     retrieval_start = time.perf_counter()
-    all_hits = retriever.retrieve(queries, top_k=top_k)
+    all_hits = _retrieve_hits(config=config, queries=queries, retriever=retriever, top_k=top_k)
     retrieval_total_ms = (time.perf_counter() - retrieval_start) * 1000.0
 
     qa_rows: list[dict[str, float]] = []
@@ -136,9 +174,13 @@ def evaluate_qa(
 
     for query, hits in zip(queries, all_hits):
         contexts = [hit.chunk_text for hit in hits]
-        start = time.perf_counter()
-        prediction_text = generator.generate(query.question, contexts)
-        elapsed = (time.perf_counter() - start) * 1000.0
+        if use_generator and generator is not None:
+            start = time.perf_counter()
+            prediction_text = generator.generate(query.question, contexts)
+            elapsed = (time.perf_counter() - start) * 1000.0
+        else:
+            prediction_text = fallback_prediction(contexts)
+            elapsed = 0.0
         generation_latencies.append(elapsed)
         context_len = sum(len(c) for c in contexts)
         context_lengths.append(context_len)
@@ -171,8 +213,16 @@ def evaluate_qa(
     metrics = {
         "em": qa_agg["em"],
         "f1": qa_agg["f1"],
+        "em_ci_low": qa_agg["em_ci_low"],
+        "em_ci_high": qa_agg["em_ci_high"],
+        "f1_ci_low": qa_agg["f1_ci_low"],
+        "f1_ci_high": qa_agg["f1_ci_high"],
         "recall_at_k": retrieval_agg["recall_at_k"],
         "mrr": retrieval_agg["mrr"],
+        "recall_at_k_ci_low": retrieval_agg["recall_at_k_ci_low"],
+        "recall_at_k_ci_high": retrieval_agg["recall_at_k_ci_high"],
+        "mrr_ci_low": retrieval_agg["mrr_ci_low"],
+        "mrr_ci_high": retrieval_agg["mrr_ci_high"],
         "avg_query_latency_ms": avg_retrieval_latency_ms + avg_generation_latency_ms,
         "avg_retrieval_latency_ms": avg_retrieval_latency_ms,
         "avg_generation_latency_ms": avg_generation_latency_ms,

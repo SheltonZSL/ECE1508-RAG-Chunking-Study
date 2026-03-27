@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.eval.stats import bootstrap_mean_ci
 from src.eval.qa_metrics import normalize_answer
 from src.pipeline.types import RetrievalHit
 
@@ -31,8 +32,23 @@ def compute_retrieval_for_query(hits: list[RetrievalHit], answers: list[str]) ->
 
 def aggregate_retrieval_metrics(rows: list[dict[str, float]]) -> dict[str, float]:
     if not rows:
-        return {"recall_at_k": 0.0, "mrr": 0.0}
+        return {
+            "recall_at_k": 0.0,
+            "mrr": 0.0,
+            "recall_at_k_ci_low": 0.0,
+            "recall_at_k_ci_high": 0.0,
+            "mrr_ci_low": 0.0,
+            "mrr_ci_high": 0.0,
+        }
     recall = sum(row["recall_at_k"] for row in rows) / len(rows)
     mrr = sum(row["reciprocal_rank"] for row in rows) / len(rows)
-    return {"recall_at_k": recall, "mrr": mrr}
-
+    recall_low, recall_high = bootstrap_mean_ci([row["recall_at_k"] for row in rows])
+    mrr_low, mrr_high = bootstrap_mean_ci([row["reciprocal_rank"] for row in rows])
+    return {
+        "recall_at_k": recall,
+        "mrr": mrr,
+        "recall_at_k_ci_low": recall_low,
+        "recall_at_k_ci_high": recall_high,
+        "mrr_ci_low": mrr_low,
+        "mrr_ci_high": mrr_high,
+    }

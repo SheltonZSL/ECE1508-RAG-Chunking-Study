@@ -4,6 +4,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import socketserver
 import sys
 import time
@@ -38,6 +39,68 @@ def _to_int(raw: Any, default: int, low: int, high: int) -> int:
     except (TypeError, ValueError):
         value = default
     return max(low, min(high, value))
+
+
+_SAFE_TOKEN_RE = re.compile(r"[^a-z0-9_-]+")
+MAX_REQUEST_BYTES = 64 * 1024
+MAX_QUESTION_CHARS = 2000
+
+
+def _sanitize_token(raw: str, default: str) -> str:
+    token = str(raw or "").strip().lower()
+    if not token:
+        return default
+    sanitized = _SAFE_TOKEN_RE.sub("_", token).strip("_")
+    return sanitized or default
+
+
+def _to_bool(raw: Any, default: bool) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return default
+    value = str(raw).strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _validate_choice(value: str, allowed: list[str], field_name: str) -> str:
+    lowered_allowed = [str(item).strip().lower() for item in allowed]
+    if value not in lowered_allowed:
+        choices = ", ".join(lowered_allowed) if lowered_allowed else "(none)"
+        raise ValueError(f"Unsupported {field_name}: '{value}'. Allowed: {choices}")
+    return value
+
+
+def _resolve_config_path(raw: str, base_config_path: str) -> str:
+    value = str(raw or "").strip()
+    if not value:
+        return base_config_path
+    candidate = (ROOT / value).resolve() if not Path(value).is_absolute() else Path(value).resolve()
+    base_candidate = (
+        (ROOT / base_config_path).resolve()
+        if not Path(base_config_path).is_absolute()
+        else Path(base_config_path).resolve()
+    )
+    if candidate == base_candidate:
+        if candidate.suffix.lower() not in {".yaml", ".yml"}:
+            raise ValueError("Config file must be .yaml or .yml")
+        if not candidate.exists():
+            raise FileNotFoundError(f"Config file not found: {candidate}")
+        return str(candidate)
+    root_resolved = ROOT.resolve()
+    try:
+        candidate.relative_to(root_resolved)
+    except ValueError as exc:
+        raise ValueError("Config path must stay within repository root.") from exc
+    if candidate.suffix.lower() not in {".yaml", ".yml"}:
+        raise ValueError("Config file must be .yaml or .yml")
+    if not candidate.exists():
+        raise FileNotFoundError(f"Config file not found: {candidate}")
+    return str(candidate)
 
 
 def _fallback_answer_from_hits(hits: list[Any]) -> str:
@@ -104,19 +167,31 @@ class InteractiveRAGService:
 
     def _build_config(self, payload: dict[str, Any]):
         cfg = copy.deepcopy(self.base_config)
-        cfg.retriever.backend = str(payload.get("backend", cfg.retriever.backend)).strip().lower()
-        cfg.chunking.strategy = str(payload.get("strategy", cfg.chunking.strategy)).strip().lower()
+        backend = _sanitize_token(
+            str(payload.get("backend", cfg.retriever.backend)), cfg.retriever.backend
+        )
+        strategy = _sanitize_token(
+            str(payload.get("strategy", cfg.chunking.strategy)), cfg.chunking.strategy
+        )
+        cfg.retriever.backend = _validate_choice(backend, cfg.run.matrix.backends, "backend")
+        cfg.chunking.strategy = _validate_choice(strategy, cfg.run.matrix.strategies, "strategy")
         cfg.chunking.chunk_size = _to_int(
             payload.get("chunk_size"), cfg.chunking.chunk_size, low=32, high=2048
         )
         cfg.chunking.overlap = _to_int(payload.get("overlap"), cfg.chunking.overlap, low=0, high=1024)
         cfg.retrieval.top_k = _to_int(payload.get("top_k"), cfg.retrieval.top_k, low=1, high=20)
 
-        cfg_name = str(payload.get("config", self.base_config_path)).strip()
-        if cfg_name and cfg_name != self.base_config_path:
+        cfg_name = _resolve_config_path(str(payload.get("config", self.base_config_path)), self.base_config_path)
+        if cfg_name != self.base_config_path:
             cfg = load_config(cfg_name)
-            cfg.retriever.backend = str(payload.get("backend", cfg.retriever.backend)).strip().lower()
-            cfg.chunking.strategy = str(payload.get("strategy", cfg.chunking.strategy)).strip().lower()
+            backend = _sanitize_token(
+                str(payload.get("backend", cfg.retriever.backend)), cfg.retriever.backend
+            )
+            strategy = _sanitize_token(
+                str(payload.get("strategy", cfg.chunking.strategy)), cfg.chunking.strategy
+            )
+            cfg.retriever.backend = _validate_choice(backend, cfg.run.matrix.backends, "backend")
+            cfg.chunking.strategy = _validate_choice(strategy, cfg.run.matrix.strategies, "strategy")
             cfg.chunking.chunk_size = _to_int(
                 payload.get("chunk_size"), cfg.chunking.chunk_size, low=32, high=2048
             )
@@ -167,8 +242,10 @@ class InteractiveRAGService:
         question = str(payload.get("question", "")).strip()
         if not question:
             raise ValueError("Question cannot be empty.")
+        if len(question) > MAX_QUESTION_CHARS:
+            raise ValueError(f"Question is too long (max {MAX_QUESTION_CHARS} chars).")
 
-        with_generation = bool(payload.get("with_generation", True))
+        with_generation = _to_bool(payload.get("with_generation", True), default=True)
         cfg = self._build_config(payload)
         if with_generation and not str(cfg.generator.model_name).strip():
             with_generation = False
@@ -221,11 +298,20 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(self.root_dir), **kwargs)
 
+    def end_headers(self) -> None:  # noqa: D401
+        # Disable static caching in local demo mode to avoid stale CSS/JS.
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
     def _write_json(self, status: int, payload: dict[str, Any]) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
@@ -243,6 +329,20 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             limit = _to_int(params.get("limit", ["8"])[0], 8, low=1, high=50)
             self._write_json(200, {"examples": self.service.examples(limit=limit)})
             return
+        if parsed.path == "/":
+            self.send_response(302)
+            self.send_header("Location", "/dashboard/")
+            self.end_headers()
+            return
+        if parsed.path == "/dashboard/":
+            self.send_response(302)
+            self.send_header("Location", "/dashboard/index.html?v=20260327")
+            self.end_headers()
+            return
+        allowed_static_prefixes = ("/dashboard/", "/results/")
+        if not any(parsed.path.startswith(prefix) for prefix in allowed_static_prefixes):
+            self.send_error(404, "Not found")
+            return
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
@@ -251,9 +351,26 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._write_json(404, {"error": "Not found"})
             return
         try:
-            length = int(self.headers.get("Content-Length", "0"))
+            length_header = self.headers.get("Content-Length", "0")
+            try:
+                length = int(length_header)
+            except ValueError as exc:
+                raise ValueError("Invalid Content-Length header.") from exc
+            if length < 0:
+                raise ValueError("Invalid Content-Length header.")
+            if length > MAX_REQUEST_BYTES:
+                self._write_json(
+                    413,
+                    {
+                        "error": f"Request body too large (max {MAX_REQUEST_BYTES} bytes).",
+                    },
+                )
+                return
             raw = self.rfile.read(length) if length > 0 else b"{}"
-            payload = json.loads(raw.decode("utf-8"))
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+            except json.JSONDecodeError as exc:
+                raise ValueError("Request body must be valid JSON.") from exc
             if not isinstance(payload, dict):
                 raise ValueError("Request body must be a JSON object.")
             response = self.service.ask(payload)
@@ -269,11 +386,12 @@ class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 },
             )
         except Exception as exc:  # pragma: no cover
+            traceback.print_exc()
             self._write_json(
                 500,
                 {
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "traceback": traceback.format_exc(limit=1),
+                    "error": "Internal server error.",
+                    "type": type(exc).__name__,
                 },
             )
 

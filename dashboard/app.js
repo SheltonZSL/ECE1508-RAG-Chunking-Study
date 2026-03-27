@@ -57,6 +57,15 @@ function fixed(value, digits = 4) {
   return num(value).toFixed(digits);
 }
 
+function escapeHtml(input) {
+  return String(input ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function setText(id, text) {
   const node = byId(id);
   if (node) node.textContent = text;
@@ -217,6 +226,7 @@ function applyFilters() {
   });
 
   state.filtered = rows;
+  updateFilteredCount(rows);
   renderTable(rows);
   renderCharts(rows);
   renderFindings(rows);
@@ -258,8 +268,8 @@ function renderTable(rows) {
   for (const row of rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${badge(row.backend)}</td>
-      <td>${badge(row.strategy)}</td>
+      <td>${badge(escapeHtml(row.backend))}</td>
+      <td>${badge(escapeHtml(row.strategy))}</td>
       <td>${num(row.chunk_size).toFixed(0)}</td>
       <td>${num(row.overlap).toFixed(0)}</td>
       <td>${num(row.top_k).toFixed(0)}</td>
@@ -442,8 +452,8 @@ function renderFindings(rows) {
     card.className = "champion-card";
     card.innerHTML = `
       <header>
-        <h4>${strategy}</h4>
-        <span class="badge">${row.backend}</span>
+        <h4>${escapeHtml(strategy)}</h4>
+        <span class="badge">${escapeHtml(row.backend)}</span>
       </header>
       <p>c${num(row.chunk_size).toFixed(0)} | o${num(row.overlap).toFixed(0)} | k${num(row.top_k).toFixed(
       0
@@ -482,11 +492,80 @@ function renderFindings(rows) {
   }
 }
 
+function updateFilteredCount(rows) {
+  setText("filteredCount", `${rows.length} rows selected`);
+}
+
+function safeFileDateStamp() {
+  const now = new Date();
+  const y = String(now.getFullYear());
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  return `${y}${m}${d}_${hh}${mm}`;
+}
+
+function downloadBlob(filename, blobText, mimeType) {
+  const blob = new Blob([blobText], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function rowsToCsv(rows) {
+  const headers = [
+    "backend",
+    "strategy",
+    "chunk_size",
+    "overlap",
+    "top_k",
+    "recall_at_k",
+    "mrr",
+    "em",
+    "f1",
+    "avg_query_latency_ms",
+    "composite_score",
+  ];
+  const escapeCsv = (value) => {
+    const text = String(value ?? "");
+    if (/[",\n]/.test(text)) return `"${text.replaceAll('"', '""')}"`;
+    return text;
+  };
+  const lines = [headers.join(",")];
+  for (const row of rows) {
+    lines.push(headers.map((header) => escapeCsv(row[header])).join(","));
+  }
+  return lines.join("\n");
+}
+
+function exportFilteredRows(kind) {
+  const rows = state.filtered || [];
+  if (!rows.length) return;
+  const stamp = safeFileDateStamp();
+  if (kind === "csv") {
+    downloadBlob(`rag_chunking_filtered_${stamp}.csv`, rowsToCsv(rows), "text/csv;charset=utf-8");
+    return;
+  }
+  downloadBlob(
+    `rag_chunking_filtered_${stamp}.json`,
+    JSON.stringify(rows, null, 2),
+    "application/json;charset=utf-8"
+  );
+}
+
 function attachEvents() {
   ["backendFilter", "strategyFilter", "sortFilter"].forEach((id) => {
     const node = byId(id);
     if (node) node.addEventListener("change", applyFilters);
   });
+  byId("exportCsvBtn")?.addEventListener("click", () => exportFilteredRows("csv"));
+  byId("exportJsonBtn")?.addEventListener("click", () => exportFilteredRows("json"));
   window.addEventListener("resize", () => renderCharts(state.filtered));
 }
 
