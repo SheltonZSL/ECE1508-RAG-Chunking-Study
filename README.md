@@ -61,6 +61,8 @@ Open:
   - Best for demos and quick iteration
 - `configs/baseline_lite_reranker.yaml`:
   - Lite setup with reranker enabled for controlled reranker-vs-baseline comparison
+- `configs/reranker_ablation_lite.yaml`:
+  - Focused reranker ablation grid (`candidate_k` and `alpha`) on lite setup
 - `configs/baseline_dense.yaml`:
   - Heavier setup (`wiki_dpr`)
   - Better for full-size study runs
@@ -104,6 +106,11 @@ python scripts/run_experiments.py --config <config_path> [--limit N] [--skip-qa]
 - Reranker extension comparison (same matrix, reranker on):
 ```bash
 python scripts/run_experiments.py --config configs/baseline_lite_reranker.yaml
+```
+- Reranker ablation experiment:
+```bash
+python scripts/run_experiments.py --config configs/reranker_ablation_lite.yaml
+python scripts/analyze_reranker_ablation.py --matrix-summary results/reranker_ablation_lite_matrix_summary.json
 ```
 - Build final report artifacts from matrix summaries:
 ```bash

@@ -11,12 +11,24 @@
     "/results/summaries/baseline_lite_matrix_summary.json",
     "../results/summaries/baseline_lite_matrix_summary.json",
     "results/summaries/baseline_lite_matrix_summary.json",
+    "/results/summaries/baseline_lite_reranker_matrix_summary.json",
+    "../results/summaries/baseline_lite_reranker_matrix_summary.json",
+    "results/summaries/baseline_lite_reranker_matrix_summary.json",
+    "/results/summaries/reranker_ablation_lite_matrix_summary.json",
+    "../results/summaries/reranker_ablation_lite_matrix_summary.json",
+    "results/summaries/reranker_ablation_lite_matrix_summary.json",
     "/results/summaries/baseline_lite_bm25_matrix_summary.json",
     "../results/summaries/baseline_lite_bm25_matrix_summary.json",
     "results/summaries/baseline_lite_bm25_matrix_summary.json",
     "/results/baseline_lite_matrix_summary.json",
     "../results/baseline_lite_matrix_summary.json",
     "results/baseline_lite_matrix_summary.json",
+    "/results/baseline_lite_reranker_matrix_summary.json",
+    "../results/baseline_lite_reranker_matrix_summary.json",
+    "results/baseline_lite_reranker_matrix_summary.json",
+    "/results/reranker_ablation_lite_matrix_summary.json",
+    "../results/reranker_ablation_lite_matrix_summary.json",
+    "results/reranker_ablation_lite_matrix_summary.json",
     "/results/baseline_lite_bm25_matrix_summary.json",
     "../results/baseline_lite_bm25_matrix_summary.json",
     "results/baseline_lite_bm25_matrix_summary.json",
@@ -53,6 +65,17 @@ function num(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function toBool(value, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(text)) return true;
+    if (["false", "0", "no", "off", ""].includes(text)) return false;
+  }
+  if (typeof value === "number") return value !== 0;
+  return fallback;
+}
+
 function fixed(value, digits = 4) {
   return num(value).toFixed(digits);
 }
@@ -77,6 +100,20 @@ function setStatus(kind, text) {
   node.classList.remove("status-ok", "status-warn", "status-err");
   node.classList.add(kind);
   node.textContent = text;
+}
+
+function setNotice(id, kind, textValue) {
+  const node = byId(id);
+  if (!node) return;
+  node.classList.remove("is-loading", "is-success", "is-warn", "is-error", "hidden");
+  node.classList.add(kind);
+  node.textContent = textValue;
+}
+
+function setHidden(id, isHidden) {
+  const node = byId(id);
+  if (!node) return;
+  node.classList.toggle("hidden", isHidden);
 }
 
 function compositeScore(row) {
@@ -123,10 +160,22 @@ async function fetchAllJson(paths) {
 }
 
 function normalizeMatrixRow(row) {
+  const rerankerEnabled = toBool(row.reranker_enabled, false);
+  const rerankerType = rerankerEnabled ? String(row.reranker_type || "overlap").trim().toLowerCase() : "none";
+  const rerankerCandidateK = row.reranker_candidate_k == null ? 20 : num(row.reranker_candidate_k);
+  const rerankerAlpha = row.reranker_alpha == null ? 0.5 : num(row.reranker_alpha);
+  const rerankerLabel = rerankerEnabled
+    ? `${rerankerType}/k${rerankerCandidateK.toFixed(0)}/a${rerankerAlpha.toFixed(2)}`
+    : "none";
   return {
     ...row,
     backend: String(row.backend || "").trim().toLowerCase(),
     strategy: String(row.strategy || "").trim().toLowerCase(),
+    reranker_enabled: rerankerEnabled,
+    reranker_type: rerankerType,
+    reranker_candidate_k: rerankerCandidateK,
+    reranker_alpha: rerankerAlpha,
+    reranker_label: rerankerLabel,
     chunk_size: num(row.chunk_size),
     overlap: num(row.overlap),
     top_k: num(row.top_k),
@@ -145,6 +194,10 @@ function mergeMatrixRows(loadedFiles) {
       const key = [
         row.backend,
         row.strategy,
+        row.reranker_enabled ? "1" : "0",
+        row.reranker_type,
+        row.reranker_candidate_k,
+        row.reranker_alpha,
         row.chunk_size,
         row.overlap,
         row.top_k,
@@ -209,15 +262,24 @@ function readFilters() {
   return {
     backend: byId("backendFilter")?.value || "all",
     strategy: byId("strategyFilter")?.value || "all",
+    rerankerMode: byId("rerankerModeFilter")?.value || "all",
+    rerankerK: byId("rerankerKFilter")?.value || "all",
+    rerankerAlpha: byId("rerankerAlphaFilter")?.value || "all",
     sortBy: byId("sortFilter")?.value || "composite_score",
   };
 }
 
 function applyFilters() {
-  const { backend, strategy, sortBy } = readFilters();
+  const { backend, strategy, rerankerMode, rerankerK, rerankerAlpha, sortBy } = readFilters();
   let rows = [...state.rows];
   if (backend !== "all") rows = rows.filter((row) => String(row.backend) === backend);
   if (strategy !== "all") rows = rows.filter((row) => String(row.strategy) === strategy);
+  if (rerankerMode !== "all") {
+    if (rerankerMode === "on") rows = rows.filter((row) => toBool(row.reranker_enabled));
+    if (rerankerMode === "off") rows = rows.filter((row) => !toBool(row.reranker_enabled));
+  }
+  if (rerankerK !== "all") rows = rows.filter((row) => String(num(row.reranker_candidate_k)) === rerankerK);
+  if (rerankerAlpha !== "all") rows = rows.filter((row) => fixed(row.reranker_alpha, 2) === rerankerAlpha);
 
   rows = rows.map((row) => ({ ...row, composite_score: compositeScore(row) }));
   rows.sort((a, b) => {
@@ -249,9 +311,9 @@ function renderOverview(rows) {
   setText(
     "m-best-config",
     best
-      ? `${best.backend}/${best.strategy} c${num(best.chunk_size).toFixed(0)} o${num(best.overlap).toFixed(
-          0
-        )} k${num(best.top_k).toFixed(0)}`
+      ? `${best.backend}/${best.strategy} ${best.reranker_label} c${num(best.chunk_size).toFixed(0)} o${num(
+          best.overlap
+        ).toFixed(0)} k${num(best.top_k).toFixed(0)}`
       : "-"
   );
   setText("m-best-latency", fastest ? `${fixed(fastest.avg_query_latency_ms, 3)} ms` : "-");
@@ -270,6 +332,9 @@ function renderTable(rows) {
     tr.innerHTML = `
       <td>${badge(escapeHtml(row.backend))}</td>
       <td>${badge(escapeHtml(row.strategy))}</td>
+      <td>${badge(row.reranker_enabled ? "on" : "off")}</td>
+      <td>${num(row.reranker_candidate_k).toFixed(0)}</td>
+      <td>${fixed(row.reranker_alpha, 2)}</td>
       <td>${num(row.chunk_size).toFixed(0)}</td>
       <td>${num(row.overlap).toFixed(0)}</td>
       <td>${num(row.top_k).toFixed(0)}</td>
@@ -421,9 +486,17 @@ function drawChart(canvasId, grouped, yLabel) {
 }
 
 function renderCharts(rows) {
-  const groupedRecall = aggregateRows(rows, "top_k", "recall_at_k", ["backend", "strategy"]);
+  const groupedRecall = aggregateRows(rows, "top_k", "recall_at_k", [
+    "backend",
+    "strategy",
+    "reranker_label",
+  ]);
   drawChart("recallChart", groupedRecall, "recall@k");
-  const groupedMrr = aggregateRows(rows, "chunk_size", "mrr", ["backend", "strategy"]);
+  const groupedMrr = aggregateRows(rows, "chunk_size", "mrr", [
+    "backend",
+    "strategy",
+    "reranker_label",
+  ]);
   drawChart("mrrChart", groupedMrr, "mrr");
 }
 
@@ -455,9 +528,9 @@ function renderFindings(rows) {
         <h4>${escapeHtml(strategy)}</h4>
         <span class="badge">${escapeHtml(row.backend)}</span>
       </header>
-      <p>c${num(row.chunk_size).toFixed(0)} | o${num(row.overlap).toFixed(0)} | k${num(row.top_k).toFixed(
+      <p>${escapeHtml(row.reranker_label)} | c${num(row.chunk_size).toFixed(0)} | o${num(row.overlap).toFixed(
       0
-    )}</p>
+    )} | k${num(row.top_k).toFixed(0)}</p>
       <p>Recall ${fixed(row.recall_at_k)} | MRR ${fixed(row.mrr)} | F1 ${fixed(row.f1)}</p>
     `;
     championGrid.appendChild(card);
@@ -479,10 +552,10 @@ function renderFindings(rows) {
   const notes = [
     `Best recall run is ${topRecall.backend}/${topRecall.strategy} at c${num(topRecall.chunk_size).toFixed(
       0
-    )}, o${num(topRecall.overlap).toFixed(0)}, k${num(topRecall.top_k).toFixed(0)}.`,
+    )}, o${num(topRecall.overlap).toFixed(0)}, k${num(topRecall.top_k).toFixed(0)} (${topRecall.reranker_label}).`,
     `Best MRR run is ${topMrr.backend}/${topMrr.strategy}, indicating strongest early-ranked evidence.`,
     `${trendNote}`,
-    `Fastest run latency is ${fixed(fast.avg_query_latency_ms, 3)} ms (${fast.backend}/${fast.strategy}).`,
+    `Fastest run latency is ${fixed(fast.avg_query_latency_ms, 3)} ms (${fast.backend}/${fast.strategy}, ${fast.reranker_label}).`,
   ];
 
   for (const note of notes) {
@@ -522,6 +595,11 @@ function rowsToCsv(rows) {
   const headers = [
     "backend",
     "strategy",
+    "reranker_enabled",
+    "reranker_type",
+    "reranker_candidate_k",
+    "reranker_alpha",
+    "reranker_label",
     "chunk_size",
     "overlap",
     "top_k",
@@ -560,7 +638,14 @@ function exportFilteredRows(kind) {
 }
 
 function attachEvents() {
-  ["backendFilter", "strategyFilter", "sortFilter"].forEach((id) => {
+  [
+    "backendFilter",
+    "strategyFilter",
+    "rerankerModeFilter",
+    "rerankerKFilter",
+    "rerankerAlphaFilter",
+    "sortFilter",
+  ].forEach((id) => {
     const node = byId(id);
     if (node) node.addEventListener("change", applyFilters);
   });
@@ -570,6 +655,8 @@ function attachEvents() {
 }
 
 async function init() {
+  setNotice("overviewNotice", "is-loading", "Loading experiment artifacts...");
+  setHidden("overviewSkeleton", false);
   try {
     const [metrics, matrixFiles] = await Promise.all([
       fetchFirstJson(DATA_CANDIDATES.metrics),
@@ -585,8 +672,13 @@ async function init() {
 
     const backends = [...new Set(state.rows.map((row) => String(row.backend)))].filter(Boolean);
     const strategies = [...new Set(state.rows.map((row) => String(row.strategy)))].filter(Boolean);
+    const rerankerKs = [...new Set(state.rows.map((row) => String(num(row.reranker_candidate_k))))].filter(Boolean);
+    const rerankerAlphas = [...new Set(state.rows.map((row) => fixed(row.reranker_alpha, 2)))].filter(Boolean);
     populateSelect("backendFilter", backends);
     populateSelect("strategyFilter", strategies);
+    populateSelect("rerankerModeFilter", ["off", "on"]);
+    populateSelect("rerankerKFilter", rerankerKs.sort((a, b) => num(a) - num(b)));
+    populateSelect("rerankerAlphaFilter", rerankerAlphas.sort((a, b) => num(a) - num(b)));
 
     setStatus("status-ok", "Ready");
     setText("metricsSource", metrics.path);
@@ -600,12 +692,16 @@ async function init() {
     renderOverview(state.rows);
     applyFilters();
     attachEvents();
+    setHidden("overviewSkeleton", true);
+    setNotice("overviewNotice", "is-success", "Overview ready. Filters and charts are synced.");
   } catch (err) {
     console.error(err);
     setStatus("status-err", "Load failed");
     setText("metricsSource", "Unavailable");
     setText("matrixSource", "Unavailable");
     setText("uniqueBackends", "-");
+    setHidden("overviewSkeleton", true);
+    setNotice("overviewNotice", "is-error", "Failed to load results files. Check paths under /results.");
   }
 }
 

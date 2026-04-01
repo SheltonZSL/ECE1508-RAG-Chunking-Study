@@ -80,6 +80,10 @@ class MatrixConfig:
     overlaps: list[int] = field(default_factory=lambda: [0, 32, 64])
     top_ks: list[int] = field(default_factory=lambda: [3, 5, 10])
     backends: list[str] = field(default_factory=lambda: ["dense", "bm25"])
+    reranker_enableds: list[bool] = field(default_factory=lambda: [False])
+    reranker_types: list[str] = field(default_factory=lambda: ["overlap"])
+    reranker_candidate_ks: list[int] = field(default_factory=lambda: [20])
+    reranker_alphas: list[float] = field(default_factory=lambda: [0.5])
 
 
 @dataclass

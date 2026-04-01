@@ -248,6 +248,81 @@ body {
   background: #fee2e2;
 }
 
+.hidden {
+  display: none !important;
+}
+
+.notice-banner {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
+}
+
+.notice-banner.is-loading {
+  color: #075985;
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.notice-banner.is-success {
+  color: #166534;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.notice-banner.is-warn {
+  color: #9a3412;
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.notice-banner.is-error {
+  color: #991b1b;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.skeleton-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.skeleton-line {
+  height: 11px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e7ecf8 25%, #f3f7ff 37%, #e7ecf8 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.skeleton-line.w-92 {
+  width: 92%;
+}
+
+.skeleton-line.w-80 {
+  width: 80%;
+}
+
+.skeleton-line.w-68 {
+  width: 68%;
+}
+
+.skeleton-line.w-54 {
+  width: 54%;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(180px, 1fr));
@@ -355,7 +430,7 @@ body {
 
 .filter-bar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
   gap: var(--space-2);
   margin-bottom: var(--space-1);
 }
@@ -431,7 +506,7 @@ canvas {
 
 table {
   width: 100%;
-  min-width: 900px;
+  min-width: 1220px;
   border-collapse: collapse;
   font-size: 0.79rem;
 }

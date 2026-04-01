@@ -33,22 +33,81 @@ from src.pipeline.workflows import (
 from src.utils.seed import seed_everything
 
 
+def _iter_reranker_settings(config):
+    matrix = config.run.matrix
+    enabled_values = matrix.reranker_enableds or [config.retrieval.reranker_enabled]
+    reranker_types = matrix.reranker_types or [config.retrieval.reranker_type]
+    candidate_ks = matrix.reranker_candidate_ks or [config.retrieval.reranker_candidate_k]
+    alphas = matrix.reranker_alphas or [config.retrieval.reranker_alpha]
+
+    settings: list[tuple[bool, str, int, float]] = []
+    for enabled in enabled_values:
+        if not enabled:
+            settings.append((False, "none", config.retrieval.reranker_candidate_k, config.retrieval.reranker_alpha))
+            continue
+        for reranker_type, candidate_k, alpha in itertools.product(
+            reranker_types,
+            candidate_ks,
+            alphas,
+        ):
+            settings.append((True, str(reranker_type), int(candidate_k), float(alpha)))
+
+    deduped: list[tuple[bool, str, int, float]] = []
+    seen: set[tuple[bool, str, int, float]] = set()
+    for setting in settings:
+        if setting in seen:
+            continue
+        seen.add(setting)
+        deduped.append(setting)
+    return deduped
+
+
 def _iter_matrix(config):
     matrix = config.run.matrix
-    for backend, strategy, chunk_size, overlap, top_k in itertools.product(
+    reranker_settings = _iter_reranker_settings(config)
+    for backend, strategy, chunk_size, overlap, top_k, reranker_setting in itertools.product(
         matrix.backends,
         matrix.strategies,
         matrix.chunk_sizes,
         matrix.overlaps,
         matrix.top_ks,
+        reranker_settings,
     ):
         if overlap >= chunk_size:
             continue
-        yield backend, strategy, chunk_size, overlap, top_k
+        reranker_enabled, reranker_type, reranker_candidate_k, reranker_alpha = reranker_setting
+        yield (
+            backend,
+            strategy,
+            chunk_size,
+            overlap,
+            top_k,
+            reranker_enabled,
+            reranker_type,
+            reranker_candidate_k,
+            reranker_alpha,
+        )
 
 
-def _run_name(base_name: str, backend: str, strategy: str, chunk_size: int, overlap: int, top_k: int) -> str:
-    return f"{base_name}_{backend}_{strategy}_c{chunk_size}_o{overlap}_k{top_k}"
+def _run_name(
+    base_name: str,
+    backend: str,
+    strategy: str,
+    chunk_size: int,
+    overlap: int,
+    top_k: int,
+    reranker_enabled: bool,
+    reranker_type: str,
+    reranker_candidate_k: int,
+    reranker_alpha: float,
+) -> str:
+    if not reranker_enabled:
+        return f"{base_name}_{backend}_{strategy}_c{chunk_size}_o{overlap}_k{top_k}_rr0"
+    alpha_tag = int(round(reranker_alpha * 100))
+    return (
+        f"{base_name}_{backend}_{strategy}_c{chunk_size}_o{overlap}_k{top_k}"
+        f"_rr1_{reranker_type}_rc{reranker_candidate_k}_ra{alpha_tag:03d}"
+    )
 
 
 def _index_name(base_name: str, backend: str, strategy: str, chunk_size: int, overlap: int) -> str:
@@ -78,7 +137,17 @@ def main() -> None:
     retriever_cache: dict[tuple[str, str, int, int], object] = {}
     count = 0
 
-    for backend, strategy, chunk_size, overlap, top_k in _iter_matrix(base_cfg):
+    for (
+        backend,
+        strategy,
+        chunk_size,
+        overlap,
+        top_k,
+        reranker_enabled,
+        reranker_type,
+        reranker_candidate_k,
+        reranker_alpha,
+    ) in _iter_matrix(base_cfg):
         if args.limit is not None and count >= args.limit:
             break
         run_start_time_utc = datetime.now(timezone.utc)
@@ -89,6 +158,11 @@ def main() -> None:
         cfg.chunking.chunk_size = chunk_size
         cfg.chunking.overlap = overlap
         cfg.retrieval.top_k = top_k
+        cfg.retrieval.reranker_enabled = reranker_enabled
+        if reranker_enabled:
+            cfg.retrieval.reranker_type = reranker_type
+        cfg.retrieval.reranker_candidate_k = reranker_candidate_k
+        cfg.retrieval.reranker_alpha = reranker_alpha
         cfg.run.experiment_name = _run_name(
             base_name=base_cfg.run.experiment_name,
             backend=backend,
@@ -96,6 +170,10 @@ def main() -> None:
             chunk_size=chunk_size,
             overlap=overlap,
             top_k=top_k,
+            reranker_enabled=reranker_enabled,
+            reranker_type=reranker_type,
+            reranker_candidate_k=reranker_candidate_k,
+            reranker_alpha=reranker_alpha,
         )
         cfg.validate()
 
@@ -200,6 +278,10 @@ def main() -> None:
                 "matrix_cell": {
                     "backend": backend,
                     "strategy": strategy,
+                    "reranker_enabled": reranker_enabled,
+                    "reranker_type": reranker_type,
+                    "reranker_candidate_k": reranker_candidate_k,
+                    "reranker_alpha": reranker_alpha,
                     "chunk_size": chunk_size,
                     "overlap": overlap,
                     "top_k": top_k,

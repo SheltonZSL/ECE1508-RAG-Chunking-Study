@@ -16,6 +16,20 @@
     #ffffff;
 }
 
+.output-panel.is-loading .metric-grid,
+.output-panel.is-loading .settings-shell,
+.output-panel.is-loading .answer-card,
+.output-panel.is-loading .payload-card,
+.output-panel.is-loading .hits,
+.output-panel.is-loading .compare-shell {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+#demoOutputSkeleton {
+  margin-bottom: var(--space-2);
+}
+
 .demo-state {
   color: #475569;
   font-size: 0.78rem;
@@ -100,6 +114,14 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(145px, 1fr));
   gap: var(--space-2);
+}
+
+.reranker-advanced {
+  transition: opacity 0.18s ease;
+}
+
+.reranker-advanced.hidden {
+  display: none;
 }
 
 .ask-form .wide {

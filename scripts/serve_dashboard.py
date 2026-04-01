@@ -41,6 +41,14 @@ def _to_int(raw: Any, default: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
 
+def _to_float(raw: Any, default: float, low: float, high: float) -> float:
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = default
+    return max(low, min(high, value))
+
+
 _SAFE_TOKEN_RE = re.compile(r"[^a-z0-9_-]+")
 MAX_REQUEST_BYTES = 64 * 1024
 MAX_QUESTION_CHARS = 2000
@@ -134,6 +142,10 @@ class InteractiveRAGService:
                 "chunk_size": cfg.chunking.chunk_size,
                 "overlap": cfg.chunking.overlap,
                 "top_k": cfg.retrieval.top_k,
+                "reranker_enabled": cfg.retrieval.reranker_enabled,
+                "reranker_type": cfg.retrieval.reranker_type,
+                "reranker_candidate_k": cfg.retrieval.reranker_candidate_k,
+                "reranker_alpha": cfg.retrieval.reranker_alpha,
                 "with_generation": generation_available,
             },
             "options": {
@@ -142,6 +154,10 @@ class InteractiveRAGService:
                 "chunk_sizes": cfg.run.matrix.chunk_sizes,
                 "overlaps": cfg.run.matrix.overlaps,
                 "top_ks": cfg.run.matrix.top_ks,
+                "reranker_enableds": cfg.run.matrix.reranker_enableds,
+                "reranker_types": cfg.run.matrix.reranker_types,
+                "reranker_candidate_ks": cfg.run.matrix.reranker_candidate_ks,
+                "reranker_alphas": cfg.run.matrix.reranker_alphas,
             },
         }
 
@@ -180,6 +196,26 @@ class InteractiveRAGService:
         )
         cfg.chunking.overlap = _to_int(payload.get("overlap"), cfg.chunking.overlap, low=0, high=1024)
         cfg.retrieval.top_k = _to_int(payload.get("top_k"), cfg.retrieval.top_k, low=1, high=20)
+        cfg.retrieval.reranker_enabled = _to_bool(
+            payload.get("reranker_enabled"), default=cfg.retrieval.reranker_enabled
+        )
+        reranker_type = _sanitize_token(
+            str(payload.get("reranker_type", cfg.retrieval.reranker_type)),
+            cfg.retrieval.reranker_type,
+        )
+        cfg.retrieval.reranker_type = _validate_choice(reranker_type, ["overlap"], "reranker_type")
+        cfg.retrieval.reranker_candidate_k = _to_int(
+            payload.get("reranker_candidate_k"),
+            cfg.retrieval.reranker_candidate_k,
+            low=cfg.retrieval.top_k,
+            high=200,
+        )
+        cfg.retrieval.reranker_alpha = _to_float(
+            payload.get("reranker_alpha"),
+            cfg.retrieval.reranker_alpha,
+            low=0.0,
+            high=1.0,
+        )
 
         cfg_name = _resolve_config_path(str(payload.get("config", self.base_config_path)), self.base_config_path)
         if cfg_name != self.base_config_path:
@@ -197,6 +233,26 @@ class InteractiveRAGService:
             )
             cfg.chunking.overlap = _to_int(payload.get("overlap"), cfg.chunking.overlap, low=0, high=1024)
             cfg.retrieval.top_k = _to_int(payload.get("top_k"), cfg.retrieval.top_k, low=1, high=20)
+            cfg.retrieval.reranker_enabled = _to_bool(
+                payload.get("reranker_enabled"), default=cfg.retrieval.reranker_enabled
+            )
+            reranker_type = _sanitize_token(
+                str(payload.get("reranker_type", cfg.retrieval.reranker_type)),
+                cfg.retrieval.reranker_type,
+            )
+            cfg.retrieval.reranker_type = _validate_choice(reranker_type, ["overlap"], "reranker_type")
+            cfg.retrieval.reranker_candidate_k = _to_int(
+                payload.get("reranker_candidate_k"),
+                cfg.retrieval.reranker_candidate_k,
+                low=cfg.retrieval.top_k,
+                high=200,
+            )
+            cfg.retrieval.reranker_alpha = _to_float(
+                payload.get("reranker_alpha"),
+                cfg.retrieval.reranker_alpha,
+                low=0.0,
+                high=1.0,
+            )
 
         cfg.run.experiment_name = (
             f"interactive_{cfg.retriever.backend}_{cfg.chunking.strategy}_"
@@ -254,7 +310,22 @@ class InteractiveRAGService:
 
         query = Query(query_id=f"interactive_{uuid.uuid4().hex[:10]}", question=question, answers=[])
         retrieval_start = time.perf_counter()
-        hits = retriever.retrieve([query], top_k=cfg.retrieval.top_k)[0]
+        retrieval_k = cfg.retrieval.top_k
+        if cfg.retrieval.reranker_enabled:
+            retrieval_k = max(cfg.retrieval.top_k, cfg.retrieval.reranker_candidate_k)
+        hits = retriever.retrieve([query], top_k=retrieval_k)[0]
+        if cfg.retrieval.reranker_enabled:
+            from src.retrieval.reranker import rerank_hits
+
+            hits = rerank_hits(
+                queries=[query],
+                all_hits=[hits],
+                reranker_type=cfg.retrieval.reranker_type,
+                top_k=cfg.retrieval.top_k,
+                alpha=cfg.retrieval.reranker_alpha,
+            )[0]
+        else:
+            hits = hits[: cfg.retrieval.top_k]
         retrieval_ms = (time.perf_counter() - retrieval_start) * 1000.0
 
         contexts = [hit.chunk_text for hit in hits]
@@ -278,6 +349,10 @@ class InteractiveRAGService:
                 "chunk_size": cfg.chunking.chunk_size,
                 "overlap": cfg.chunking.overlap,
                 "top_k": cfg.retrieval.top_k,
+                "reranker_enabled": cfg.retrieval.reranker_enabled,
+                "reranker_type": cfg.retrieval.reranker_type if cfg.retrieval.reranker_enabled else "none",
+                "reranker_candidate_k": cfg.retrieval.reranker_candidate_k,
+                "reranker_alpha": cfg.retrieval.reranker_alpha,
                 "with_generation": with_generation,
                 "experiment_name": cfg.run.experiment_name,
             },
