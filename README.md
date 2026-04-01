@@ -1,135 +1,151 @@
 # ECE1508 RAG Chunking Study
 
-A reproducible RAG experiment framework for one core question:
+## Overview
+This repository implements a reproducible Retrieval-Augmented Generation (RAG) experiment framework for the following research question:
 
-**How do chunking choices change retrieval quality and final QA quality in a frozen-model pipeline?**
+**How do chunking design choices affect retrieval quality and downstream QA quality in a frozen-model pipeline?**
 
-## 1) What this project includes
+The project is designed for controlled comparison, not model training. All models are used in frozen (pretrained) form.
+
+## Implemented Scope
 - Dense retrieval: `intfloat/e5-base-v2` + FAISS (`IndexFlatIP`)
-- Sparse retrieval baseline: BM25 (`rank-bm25`)
-- Generator: `google/flan-t5-base` (fallback to `google/flan-t5-small`)
+- Sparse baseline: BM25 (`rank-bm25`)
+- Generation model: `google/flan-t5-base` (fallback: `google/flan-t5-small`)
 - Chunking strategies: `fixed`, `structure`, `adaptive`
-- Metrics: `EM`, `F1`, `Recall@k`, `MRR`, latency
-- Frontend demo dashboard + live QA page
+- Metrics:
+  - QA: `EM`, `F1`
+  - Retrieval: `Recall@k`, `MRR`
+  - Efficiency: retrieval/total latency
+- Frontend:
+  - dashboard (`/dashboard/`)
+  - interactive QA demo (`/dashboard/demo.html`)
 
-No training or fine-tuning is used.
+Out of scope:
+- training, fine-tuning, distillation
+- production deployment and distributed serving
 
-## 2) Quick start (recommended)
+## Repository Structure
+```text
+ECE1508-RAG-Chunking-Study/
+|- configs/                 # experiment YAML configs
+|- dashboard/               # frontend dashboard and interactive demo
+|- data/
+|  |- demo/                 # bundled lightweight demo corpus
+|  |- processed/            # generated prepared corpus/query files (gitignored)
+|  |- indexes/              # generated index and chunk artifacts (gitignored)
+|- results/                 # generated run outputs and analysis (gitignored except .gitkeep)
+|- scripts/                 # executable experiment/evaluation scripts
+|- src/                     # core implementation
+|- tests/                   # unit and smoke tests
+|- requirements.txt
+|- README.md
+```
+
+Additional structure notes: `docs/PROJECT_STRUCTURE.md`
+
+## Environment
+- Python `3.10+` (recommended `3.10` or `3.11`)
+- Windows/macOS/Linux
+- CPU is sufficient for portable interactive mode
+- GPU is recommended for larger dense/generation runs
+
+Setup:
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Environment requirements:
-- Python `3.10+` (recommended: `3.10` or `3.11`)
-- OS: Windows/macOS/Linux
-- For instant interactive mode: CPU is enough
-- For full dense + generation experiments: GPU is recommended but optional
+## Quick Start
 
-### Step A (Instant Interactive, zero data prep)
+### A) Portable Interactive Mode (fastest, no data prep)
+Runs directly on bundled demo corpus. No dataset download, no index prebuild.
+
 ```bash
 python scripts/setup_portable.py --open
-```
-
-This mode uses bundled demo data (`data/demo`) + BM25 retrieval.
-No dataset download, no index prebuild required.
-In this mode, `run_qa_eval.py` also works without loading an HF generator model (fallback answer from retrieved evidence).
-
-### Step B (Full experiment mode): Prepare data (lite mode)
-```bash
-python scripts/setup_full.py
-```
-
-### Step C (Full experiment mode): Run baseline QA eval (optional)
-```bash
-python scripts/setup_full.py --run-qa
-```
-
-### Step D: Open frontend in full mode
-```bash
-python scripts/setup_full.py --serve --open
 ```
 
 Open:
 - `http://127.0.0.1:8000/dashboard/`
 - `http://127.0.0.1:8000/dashboard/demo.html`
 
-## 3) Config choices
-- `configs/baseline_lite.yaml`:
-  - Smaller, disk-friendly corpus setup
-  - Best for demos and quick iteration
-- `configs/baseline_lite_reranker.yaml`:
-  - Lite setup with reranker enabled for controlled reranker-vs-baseline comparison
-- `configs/reranker_ablation_lite.yaml`:
-  - Focused reranker ablation grid (`candidate_k` and `alpha`) on lite setup
-- `configs/baseline_dense.yaml`:
-  - Heavier setup (`wiki_dpr`)
-  - Better for full-size study runs
-- `configs/baseline_bm25.yaml`:
-  - BM25 baseline config
-- `configs/baseline_lite_bm25_only.yaml`:
-  - BM25 matrix on lite corpus
-- `configs/portable_interactive.yaml`:
-  - Clone-and-run interactive demo mode
-  - Uses bundled local demo corpus, no prep step
+### B) Full Experiment Mode (lite baseline recommended)
+```bash
+python scripts/setup_full.py
+```
 
-## 4) Main commands
-- One-click portable setup + serve:
+Optional:
 ```bash
-python scripts/setup_portable.py [--install-deps] [--open]
+python scripts/setup_full.py --run-qa
+python scripts/setup_full.py --serve --open
 ```
-- One-click full setup (+ optional serve/eval):
-```bash
-python scripts/setup_full.py [--install-deps] [--run-qa] [--serve --open]
-```
-- Prepare data:
+
+## Configuration Files
+- `configs/portable_interactive.yaml`  
+  Lightweight interactive mode using bundled local demo data.
+
+- `configs/baseline_lite.yaml`  
+  Recommended reproducibility baseline with moderate disk/runtime cost.
+
+- `configs/baseline_lite_bm25_only.yaml`  
+  BM25-only matrix on lite corpus.
+
+- `configs/baseline_lite_reranker.yaml`  
+  Lite matrix with reranker enabled for controlled comparison.
+
+- `configs/reranker_ablation_lite.yaml`  
+  Reranker ablation grid (`candidate_k`, `alpha`) on lite setup.
+
+- `configs/baseline_dense.yaml`  
+  Heavier dense setting (larger corpus), intended for extended runs.
+
+- `configs/baseline_bm25.yaml`  
+  BM25 baseline on full setting.
+
+## Main Commands
+
+### Data and Index
 ```bash
 python scripts/prepare_data.py --config <config_path>
-```
-- Build index:
-```bash
 python scripts/build_index.py --config <config_path> [--force-rebuild]
 ```
-- Retrieval-only eval:
+
+### Evaluation
 ```bash
 python scripts/run_retrieval_eval.py --config <config_path> [--force-rebuild]
-```
-- End-to-end QA eval:
-```bash
 python scripts/run_qa_eval.py --config <config_path> [--force-rebuild]
 ```
-- Matrix experiments:
+
+### Matrix Experiments
 ```bash
 python scripts/run_experiments.py --config <config_path> [--limit N] [--skip-qa] [--force-rebuild]
 ```
-- Reranker extension comparison (same matrix, reranker on):
+
+Reranker-focused runs:
 ```bash
 python scripts/run_experiments.py --config configs/baseline_lite_reranker.yaml
-```
-- Reranker ablation experiment:
-```bash
 python scripts/run_experiments.py --config configs/reranker_ablation_lite.yaml
 python scripts/analyze_reranker_ablation.py --matrix-summary results/reranker_ablation_lite_matrix_summary.json
 ```
-- Build final report artifacts from matrix summaries:
+
+### Reporting and Visualization
 ```bash
 python scripts/build_final_report.py [--results-dir results] [--out-dir results/analysis]
-```
-- Generate deeper sensitivity-analysis plots:
-```bash
 python scripts/plot_sensitivity.py --matrix-summary <summary_json_or_list...> [--out-dir results/analysis/sensitivity]
+python scripts/organize_results.py
 ```
-Example (baseline + reranker summary together):
+
+Example:
 ```bash
 python scripts/plot_sensitivity.py --matrix-summary results/baseline_lite_matrix_summary.json results/baseline_lite_reranker_matrix_summary.json
 ```
-- API smoke tests:
+
+### API Smoke Test
 ```bash
 pytest -q tests/test_api_smoke.py
 ```
 
-## 5) Output contract
+## Output Contract
 Each run writes:
 - `results/{exp_name}/metrics.json`
 - `results/{exp_name}/predictions.jsonl`
@@ -137,168 +153,58 @@ Each run writes:
 - `results/{exp_name}/error_analysis.md`
 - `results/{exp_name}/run_manifest.json`
 
-For matrix suite runs, an extra suite-level manifest is written:
+Matrix suite run also writes:
 - `results/{base_exp_name}_run_manifest.json`
 
-For cleaner presentation, you can reorganize outputs into:
-- `results/runs/`
-- `results/summaries/`
-- `results/analysis/{dense,bm25}/`
-
-Command:
-```bash
-python scripts/organize_results.py
-```
-
-Indexes/chunks are stored under:
+Index and chunk artifacts are stored under:
 - `data/indexes/{index_name}/...`
 
-## 6) Project structure map
-```text
-ECE1508-RAG-Chunking-Study/
-|- configs/                 # experiment YAMLs (7 fixed sections)
-|- dashboard/               # frontend dashboard + interactive demo
-|- data/
-|  |- processed/            # prepared queries/corpus jsonl (ignored by git)
-|  |- indexes/              # FAISS/BM25 artifacts + chunks (ignored by git)
-|- results/                 # experiment outputs and analysis (ignored by git)
-|- scripts/                 # runnable CLI entrypoints
-|- src/
-|  |- config/               # config dataclasses + loader
-|  |- data/                 # NQ + corpus preparation
-|  |- chunking/             # fixed / structure / adaptive chunkers
-|  |- retrieval/            # dense + bm25 retrievers
-|  |- generation/           # HF generator wrapper
-|  |- pipeline/             # orchestration + shared types
-|  |- eval/                 # QA/retrieval metrics + reporting
-|  |- utils/                # io, seed, text helpers
-|- tests/                   # unit + smoke tests
-|- requirements.txt
-|- README.md
-```
-
-Detailed structure notes:
-- `docs/PROJECT_STRUCTURE.md`
-
-## 7) Common confusion (important)
-- Matrix mode can be slow because it runs many combinations.
-- Dense index files are large (tens of MB each). This is expected.
-- `data/` and `results/` are intentionally not uploaded to GitHub.
-- Teammates should run the same scripts locally to regenerate data/index/results.
-- If you have old matrix runs, you may have duplicated legacy index folders with `_k*` suffix.
-  - Dry run:
-  ```bash
-  python scripts/cleanup_legacy_indexes.py
-  ```
-  - Apply deletion:
-  ```bash
-  python scripts/cleanup_legacy_indexes.py --apply
-  ```
-
-### Optional: remove `TRANSFORMERS_CACHE` deprecation warning
-The project now auto-maps deprecated `TRANSFORMERS_CACHE` to `HF_HOME` at runtime.
-If you want to clean your Windows user environment permanently, run:
-```powershell
-[Environment]::SetEnvironmentVariable("HF_HOME", "$env:USERPROFILE\\.cache\\huggingface", "User")
-[Environment]::SetEnvironmentVariable("TRANSFORMERS_CACHE", $null, "User")
-```
-Then restart your terminal.
-
-## 8) Recent framework improvements
-- Dashboard now merges multiple matrix summary files (Dense + BM25 can be shown together).
-- Matrix runner now reuses one index for multiple `top_k` settings, reducing duplicated index files and runtime.
-- Latency metrics now reflect real retrieval/end-to-end timing instead of metric-computation overhead.
-- Every eval run now writes `run_manifest.json` (config snapshot, script args, env, git info, timing).
-- Interactive demo now supports A/B comparison (Run A vs Run B side-by-side with latency and evidence).
-- Added API smoke test coverage for `/api/health`, `/api/defaults`, `/api/examples`, `/api/ask`.
-- Added bootstrap CI fields for EM/F1/Recall@k/MRR in evaluation outputs.
-- Added dashboard export for filtered runs (CSV/JSON buttons in the Experiment Lab panel).
-- Added final report auto-builder (`scripts/build_final_report.py`) for:
-  - `results/analysis/comparison_table.csv`
-  - `results/analysis/final_report.md`
-- Added optional reranker extension (default off):
-  - config keys: `retrieval.reranker_enabled`, `reranker_type`, `reranker_candidate_k`, `reranker_alpha`
-  - supports controlled reranker/no-reranker comparison under the same retrieval backend
-- Added deeper sensitivity-analysis visualization script (`scripts/plot_sensitivity.py`) for:
-  - quality-latency tradeoff scatter
-  - top-k sensitivity curves
-  - chunk-size/overlap heatmaps
-  - markdown summary (`sensitivity_summary.md`)
-- Hardened interactive API:
-  - config path confinement to repo root
-  - backend/strategy option validation
-  - request body size limit
-  - no traceback leakage in API error responses
-- Replaced BM25 pickle deserialization with JSON-only metadata restore path.
-
-## 9) What is included in clone vs generated locally
-Included in GitHub clone:
-- Source code (`src/`, `scripts/`, `dashboard/`, `tests/`)
-- Config files (`configs/`)
-- Lightweight demo corpus (`data/demo/corpus.jsonl`, `data/demo/queries.jsonl`)
-
-Generated locally (not committed):
-- `data/processed/*`
-- `data/indexes/*`
-- `results/*` (except `results/.gitkeep`)
-
-Implication:
-- Teammates can clone and immediately run interactive demo mode.
-- Teammates must run preparation/eval scripts locally to regenerate experiment outputs.
-
-## 10) Core reproducibility commands (final version)
-Quick interactive demo (no heavy download):
-```bash
-python scripts/setup_portable.py --open
-```
-
-Lite baseline (recommended reproducibility path):
+## Reproducibility Checklist (Recommended Final Run)
 ```bash
 python scripts/prepare_data.py --config configs/baseline_lite.yaml
 python scripts/build_index.py --config configs/baseline_lite.yaml
 python scripts/run_retrieval_eval.py --config configs/baseline_lite.yaml
 python scripts/run_qa_eval.py --config configs/baseline_lite.yaml
-```
-
-Reranker ablation (lite):
-```bash
 python scripts/run_experiments.py --config configs/reranker_ablation_lite.yaml
 python scripts/analyze_reranker_ablation.py --matrix-summary results/reranker_ablation_lite_matrix_summary.json
 ```
 
-Optional final report assembly:
-```bash
-python scripts/build_final_report.py --results-dir results --out-dir results/analysis
-python scripts/plot_sensitivity.py --matrix-summary results/baseline_lite_matrix_summary.json results/reranker_ablation_lite_matrix_summary.json
-```
+## What Is Tracked in Git
+Included in clone:
+- source code (`src/`, `scripts/`, `dashboard/`, `tests/`)
+- configs (`configs/`)
+- demo corpus (`data/demo/corpus.jsonl`, `data/demo/queries.jsonl`)
 
-## 11) Troubleshooting quick fixes
+Generated locally (not tracked):
+- `data/processed/*`
+- `data/indexes/*`
+- `results/*` (except `results/.gitkeep`)
+
+## Troubleshooting
 - `ModuleNotFoundError: No module named 'yaml'`
-  - Install dependencies:
+  - Run:
   ```bash
   pip install -r requirements.txt
   ```
-- Hugging Face download is slow or rate-limited
-  - Login once:
+
+- Hugging Face downloads are slow or rate-limited
+  - Authenticate once:
   ```bash
   hf auth login
   ```
-  - Or set `HF_TOKEN` in environment.
-- Disk pressure on `C:` from model cache
-  - Move cache to `D:`:
+  - Or set `HF_TOKEN`.
+
+- Cache fills `C:` drive
+  - Move cache to `D:` (Windows):
   ```powershell
   [Environment]::SetEnvironmentVariable("HF_HOME", "D:\\hf_home", "User")
   [Environment]::SetEnvironmentVariable("TRANSFORMERS_CACHE", $null, "User")
   ```
-  - Restart terminal after setting.
-- `Repo id ... ''` (empty model id) in QA eval
-  - Ensure `generator.model_name` is non-empty in config, or run no-generation flow (interactive BM25 fallback).
-- `pytest` temp permission error on Windows (`WinError 5`)
-  - Usually local ACL issue for temp folders; run terminal as normal user with writable temp path, or set a custom writable `--basetemp`.
+  - Restart terminal.
 
-## 12) Final submission status
-This repository is finalized for course submission.
+- `Repo id ... ''` during QA eval
+  - Ensure `generator.model_name` is set in config.
 
-- Mandatory implementation scope is completed.
-- Reproducibility commands and troubleshooting instructions are documented.
-- No additional required feature updates remain for the final version.
+- `pytest` temp directory permission issue (`WinError 5`)
+  - Use a writable temp directory or set a custom writable `--basetemp`.
+
