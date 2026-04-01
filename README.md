@@ -231,8 +231,74 @@ Then restart your terminal.
   - no traceback leakage in API error responses
 - Replaced BM25 pickle deserialization with JSON-only metadata restore path.
 
-## 9) Post-v1: planned modifications and additions
-The current version is submission-ready for an initial release. The following items are planned next:
+## 9) What is included in clone vs generated locally
+Included in GitHub clone:
+- Source code (`src/`, `scripts/`, `dashboard/`, `tests/`)
+- Config files (`configs/`)
+- Lightweight demo corpus (`data/demo/corpus.jsonl`, `data/demo/queries.jsonl`)
 
-- Add optional API auth mode for non-local sharing scenarios:
-  - token gate for `/api/ask` when serving beyond localhost
+Generated locally (not committed):
+- `data/processed/*`
+- `data/indexes/*`
+- `results/*` (except `results/.gitkeep`)
+
+Implication:
+- Teammates can clone and immediately run interactive demo mode.
+- Teammates must run preparation/eval scripts locally to regenerate experiment outputs.
+
+## 10) Core reproducibility commands (final version)
+Quick interactive demo (no heavy download):
+```bash
+python scripts/setup_portable.py --open
+```
+
+Lite baseline (recommended reproducibility path):
+```bash
+python scripts/prepare_data.py --config configs/baseline_lite.yaml
+python scripts/build_index.py --config configs/baseline_lite.yaml
+python scripts/run_retrieval_eval.py --config configs/baseline_lite.yaml
+python scripts/run_qa_eval.py --config configs/baseline_lite.yaml
+```
+
+Reranker ablation (lite):
+```bash
+python scripts/run_experiments.py --config configs/reranker_ablation_lite.yaml
+python scripts/analyze_reranker_ablation.py --matrix-summary results/reranker_ablation_lite_matrix_summary.json
+```
+
+Optional final report assembly:
+```bash
+python scripts/build_final_report.py --results-dir results --out-dir results/analysis
+python scripts/plot_sensitivity.py --matrix-summary results/baseline_lite_matrix_summary.json results/reranker_ablation_lite_matrix_summary.json
+```
+
+## 11) Troubleshooting quick fixes
+- `ModuleNotFoundError: No module named 'yaml'`
+  - Install dependencies:
+  ```bash
+  pip install -r requirements.txt
+  ```
+- Hugging Face download is slow or rate-limited
+  - Login once:
+  ```bash
+  hf auth login
+  ```
+  - Or set `HF_TOKEN` in environment.
+- Disk pressure on `C:` from model cache
+  - Move cache to `D:`:
+  ```powershell
+  [Environment]::SetEnvironmentVariable("HF_HOME", "D:\\hf_home", "User")
+  [Environment]::SetEnvironmentVariable("TRANSFORMERS_CACHE", $null, "User")
+  ```
+  - Restart terminal after setting.
+- `Repo id ... ''` (empty model id) in QA eval
+  - Ensure `generator.model_name` is non-empty in config, or run no-generation flow (interactive BM25 fallback).
+- `pytest` temp permission error on Windows (`WinError 5`)
+  - Usually local ACL issue for temp folders; run terminal as normal user with writable temp path, or set a custom writable `--basetemp`.
+
+## 12) Final submission status
+This repository is finalized for course submission.
+
+- Mandatory implementation scope is completed.
+- Reproducibility commands and troubleshooting instructions are documented.
+- No additional required feature updates remain for the final version.
