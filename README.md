@@ -1,30 +1,75 @@
 # ECE1508 RAG Chunking Study
 
-## Overview
-This repository implements a reproducible Retrieval-Augmented Generation (RAG) experiment framework for the following research question:
+## 1) Project Purpose
+This project provides a reproducible Retrieval-Augmented Generation (RAG) experiment framework to evaluate how chunking strategy impacts retrieval quality and downstream QA quality in a frozen-model setup.
 
-**How do chunking design choices affect retrieval quality and downstream QA quality in a frozen-model pipeline?**
+Primary study question:
+- when retriever and generator models are fixed, which chunking strategy yields the best retrieval and answer quality tradeoff?
 
-The project is designed for controlled comparison, not model training. All models are used in frozen (pretrained) form.
+## 2) Project Value
+This repository can be used as:
+- a research framework for chunking strategy comparison
+- a benchmark template for Dense vs BM25 retrieval baselines
+- an engineering reference for end-to-end RAG evaluation workflows
 
-## Implemented Scope
+It provides:
+- standardized configurations for fair comparison
+- consistent output protocol for reproducibility
+- unified metrics for quality and efficiency analysis
+
+## 3) Project Results
+The framework produces structured and reproducible outputs for each run, including:
+- QA metrics: `EM`, `F1`
+- retrieval metrics: `Recall@k`, `MRR`
+- efficiency metrics: retrieval latency and total latency
+- detailed prediction/evidence artifacts for error analysis
+
+It also supports matrix studies and reranker ablation analysis to produce comparison tables, summaries, and plots.
+
+Current lite-run highlights from repository artifacts:
+- Dense baseline (`fixed`, chunk size `128`, overlap `0`, `top_k=10`) reached `Recall@10 = 0.12` and `MRR = 0.0427`.
+- Increasing `top_k` from `3 -> 5 -> 10` improved recall (`0.06 -> 0.09 -> 0.12`) and MRR (`0.0317 -> 0.0387 -> 0.0427`) with latency increase (`0.176 ms -> 0.258 ms -> 0.489 ms`).
+- Best reranker quality gain in the lite ablation was at `candidate_k=10`, `alpha=0.20`, with `delta_f1=+0.0194` and `delta_latency=+0.143 ms`.
+
+## 4) Visualization and Interactive Demo
+This project includes built-in visualization and interactive inspection:
+- dashboard overview: `/dashboard/`
+- live QA console: `/dashboard/demo.html`
+- plotting/report scripts: `scripts/plot_results.py`, `scripts/plot_sensitivity.py`, `scripts/build_final_report.py`
+
+### Visualization Preview
+#### Retrieval Trend (Dense)
+![Recall vs Top-k (Dense)](docs/assets/recall_vs_topk_dense.png)
+
+#### Reranker Ablation
+![Reranker Ablation Scatter](docs/assets/reranker_ablation_scatter.png)
+
+### What the charts indicate
+- **Recall vs Top-k (Dense):** expanding top-k improves coverage, but latency also grows, showing a clear retrieval quality vs efficiency tradeoff.
+- **Reranker ablation scatter:** reranker settings can improve `F1` at moderate latency cost, but gains are configuration-sensitive and may not improve every retrieval metric simultaneously.
+
+## 5) Why This Fits Applied Deep Learning
+This project aligns with an Applied Deep Learning course because it applies pretrained deep models in a real evaluation workflow and analyzes practical design tradeoffs:
+- uses foundation models directly in an application pipeline (`e5-base-v2`, `flan-t5`)
+- studies model behavior under system-level design choices (chunking, top-k, reranking) rather than training-only metrics
+- evaluates with deployment-relevant criteria: answer quality, retrieval ranking quality, and latency
+- includes reproducibility, ablation, and visualization, which are core expectations for applied ML engineering
+
+The focus is on **applied model utilization and decision-making**, which is central to Applied Deep Learning projects.
+
+## 6) Implemented Scope
 - Dense retrieval: `intfloat/e5-base-v2` + FAISS (`IndexFlatIP`)
 - Sparse baseline: BM25 (`rank-bm25`)
-- Generation model: `google/flan-t5-base` (fallback: `google/flan-t5-small`)
+- Generator: `google/flan-t5-base` (fallback: `google/flan-t5-small`)
 - Chunking strategies: `fixed`, `structure`, `adaptive`
-- Metrics:
-  - QA: `EM`, `F1`
-  - Retrieval: `Recall@k`, `MRR`
-  - Efficiency: retrieval/total latency
-- Frontend:
-  - dashboard (`/dashboard/`)
-  - interactive QA demo (`/dashboard/demo.html`)
+- Metrics: `EM`, `F1`, `Recall@k`, `MRR`, latency
+- Frontend: dashboard + interactive demo
 
 Out of scope:
-- training, fine-tuning, distillation
+- model training, fine-tuning, distillation
 - production deployment and distributed serving
 
-## Repository Structure
+## 7) Repository Structure
 ```text
 ECE1508-RAG-Chunking-Study/
 |- configs/                 # experiment YAML configs
@@ -43,7 +88,8 @@ ECE1508-RAG-Chunking-Study/
 
 Additional structure notes: `docs/PROJECT_STRUCTURE.md`
 
-## Environment
+## 8) Environment Setup
+Requirements:
 - Python `3.10+` (recommended `3.10` or `3.11`)
 - Windows/macOS/Linux
 - CPU is sufficient for portable interactive mode
@@ -56,10 +102,9 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Quick Start
-
-### A) Portable Interactive Mode (fastest, no data prep)
-Runs directly on bundled demo corpus. No dataset download, no index prebuild.
+## 9) Quick Start
+### A) Portable Interactive Mode (fastest)
+Runs directly on bundled demo corpus. No dataset download and no index prebuild required.
 
 ```bash
 python scripts/setup_portable.py --open
@@ -80,30 +125,16 @@ python scripts/setup_full.py --run-qa
 python scripts/setup_full.py --serve --open
 ```
 
-## Configuration Files
-- `configs/portable_interactive.yaml`  
-  Lightweight interactive mode using bundled local demo data.
+## 10) Configuration Files
+- `configs/portable_interactive.yaml`: lightweight interactive mode with bundled local demo corpus
+- `configs/baseline_lite.yaml`: recommended reproducibility baseline
+- `configs/baseline_lite_bm25_only.yaml`: BM25-only matrix on lite corpus
+- `configs/baseline_lite_reranker.yaml`: lite matrix with reranker enabled
+- `configs/reranker_ablation_lite.yaml`: reranker ablation grid (`candidate_k`, `alpha`)
+- `configs/baseline_dense.yaml`: heavier dense setting for extended runs
+- `configs/baseline_bm25.yaml`: BM25 baseline on full setting
 
-- `configs/baseline_lite.yaml`  
-  Recommended reproducibility baseline with moderate disk/runtime cost.
-
-- `configs/baseline_lite_bm25_only.yaml`  
-  BM25-only matrix on lite corpus.
-
-- `configs/baseline_lite_reranker.yaml`  
-  Lite matrix with reranker enabled for controlled comparison.
-
-- `configs/reranker_ablation_lite.yaml`  
-  Reranker ablation grid (`candidate_k`, `alpha`) on lite setup.
-
-- `configs/baseline_dense.yaml`  
-  Heavier dense setting (larger corpus), intended for extended runs.
-
-- `configs/baseline_bm25.yaml`  
-  BM25 baseline on full setting.
-
-## Main Commands
-
+## 11) Main Commands
 ### Data and Index
 ```bash
 python scripts/prepare_data.py --config <config_path>
@@ -145,7 +176,7 @@ python scripts/plot_sensitivity.py --matrix-summary results/baseline_lite_matrix
 pytest -q tests/test_api_smoke.py
 ```
 
-## Output Contract
+## 12) Output Contract
 Each run writes:
 - `results/{exp_name}/metrics.json`
 - `results/{exp_name}/predictions.jsonl`
@@ -153,13 +184,13 @@ Each run writes:
 - `results/{exp_name}/error_analysis.md`
 - `results/{exp_name}/run_manifest.json`
 
-Matrix suite run also writes:
+Matrix suite runs also write:
 - `results/{base_exp_name}_run_manifest.json`
 
-Index and chunk artifacts are stored under:
+Index/chunk artifacts are stored under:
 - `data/indexes/{index_name}/...`
 
-## Reproducibility Checklist (Recommended Final Run)
+## 13) Reproducibility Checklist (Recommended Final Run)
 ```bash
 python scripts/prepare_data.py --config configs/baseline_lite.yaml
 python scripts/build_index.py --config configs/baseline_lite.yaml
@@ -169,7 +200,7 @@ python scripts/run_experiments.py --config configs/reranker_ablation_lite.yaml
 python scripts/analyze_reranker_ablation.py --matrix-summary results/reranker_ablation_lite_matrix_summary.json
 ```
 
-## What Is Tracked in Git
+## 14) What Is Tracked in Git
 Included in clone:
 - source code (`src/`, `scripts/`, `dashboard/`, `tests/`)
 - configs (`configs/`)
@@ -180,31 +211,23 @@ Generated locally (not tracked):
 - `data/indexes/*`
 - `results/*` (except `results/.gitkeep`)
 
-## Troubleshooting
+## 15) Troubleshooting
 - `ModuleNotFoundError: No module named 'yaml'`
-  - Run:
-  ```bash
-  pip install -r requirements.txt
-  ```
+  - run `pip install -r requirements.txt`
 
 - Hugging Face downloads are slow or rate-limited
-  - Authenticate once:
-  ```bash
-  hf auth login
-  ```
-  - Or set `HF_TOKEN`.
+  - run `hf auth login`
+  - or set `HF_TOKEN`
 
 - Cache fills `C:` drive
-  - Move cache to `D:` (Windows):
+  - move Hugging Face cache to `D:`:
   ```powershell
   [Environment]::SetEnvironmentVariable("HF_HOME", "D:\\hf_home", "User")
   [Environment]::SetEnvironmentVariable("TRANSFORMERS_CACHE", $null, "User")
   ```
-  - Restart terminal.
 
 - `Repo id ... ''` during QA eval
-  - Ensure `generator.model_name` is set in config.
+  - ensure `generator.model_name` is set in config
 
 - `pytest` temp directory permission issue (`WinError 5`)
-  - Use a writable temp directory or set a custom writable `--basetemp`.
-
+  - use a writable temp directory or set a writable `--basetemp`
