@@ -254,8 +254,9 @@ class InteractiveRAGService:
                 high=1.0,
             )
 
+        base_name = str(cfg.run.experiment_name).strip() or "interactive"
         cfg.run.experiment_name = (
-            f"interactive_{cfg.retriever.backend}_{cfg.chunking.strategy}_"
+            f"{base_name}_{cfg.retriever.backend}_{cfg.chunking.strategy}_"
             f"c{cfg.chunking.chunk_size}_o{cfg.chunking.overlap}"
         )
         cfg.validate()

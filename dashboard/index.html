@@ -88,56 +88,19 @@
         <div class="panel-head">
           <div>
             <p class="eyebrow">Experiment Lab</p>
-            <h2>Filter and Compare Runs</h2>
-          </div>
-          <div class="tool-actions">
-            <button id="exportCsvBtn" type="button" class="btn btn-ghost btn-small">Export CSV</button>
-            <button id="exportJsonBtn" type="button" class="btn btn-ghost btn-small">Export JSON</button>
+            <h2>Complete Experiment Results</h2>
           </div>
         </div>
 
-        <div class="filter-bar">
-          <label>
-            Backend
-            <select id="backendFilter"></select>
-          </label>
-          <label>
-            Strategy
-            <select id="strategyFilter"></select>
-          </label>
-          <label>
-            Reranker
-            <select id="rerankerModeFilter"></select>
-          </label>
-          <label>
-            Candidate K
-            <select id="rerankerKFilter"></select>
-          </label>
-          <label>
-            Alpha
-            <select id="rerankerAlphaFilter"></select>
-          </label>
-          <label>
-            Sort By
-            <select id="sortFilter">
-              <option value="composite_score">Composite Score (desc)</option>
-              <option value="recall_at_k">Recall@k (desc)</option>
-              <option value="mrr">MRR (desc)</option>
-              <option value="f1">F1 (desc)</option>
-              <option value="avg_query_latency_ms">Latency (asc)</option>
-            </select>
-          </label>
-        </div>
-
-        <p id="filteredCount" class="filter-note">0 rows selected</p>
+        <p id="resultsSummary" class="filter-note">Loading complete experiment matrix...</p>
 
         <div class="chart-layout">
           <article class="chart-panel">
-            <h3>Recall@k vs Top-k</h3>
+            <h3>Best Recall@k vs Top-k by Backend</h3>
             <canvas id="recallChart" width="860" height="340"></canvas>
           </article>
           <article class="chart-panel">
-            <h3>MRR vs Chunk Size</h3>
+            <h3>Best F1 by Strategy at Highest Top-k</h3>
             <canvas id="mrrChart" width="860" height="340"></canvas>
           </article>
         </div>
@@ -149,16 +112,11 @@
                 <th>backend</th>
                 <th>strategy</th>
                 <th>reranker</th>
-                <th>cand_k</th>
-                <th>alpha</th>
-                <th>chunk</th>
-                <th>overlap</th>
                 <th>top_k</th>
                 <th>recall@k</th>
                 <th>mrr</th>
                 <th>f1</th>
                 <th>latency(ms)</th>
-                <th>score</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -175,7 +133,7 @@
         </div>
         <div class="findings-layout">
           <article>
-            <h3>Top Config Per Strategy</h3>
+            <h3>Top Configs</h3>
             <div id="championGrid" class="champion-grid"></div>
           </article>
           <article>

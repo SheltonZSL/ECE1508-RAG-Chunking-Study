@@ -53,7 +53,6 @@ const SERIES_COLORS = [
 const state = {
   metrics: {},
   rows: [],
-  filtered: [],
 };
 
 function byId(id) {
@@ -238,60 +237,10 @@ function animateValue(target, value, suffix = "", digits = 4) {
   requestAnimationFrame(step);
 }
 
-function populateSelect(id, values) {
-  const select = byId(id);
-  if (!select) return;
-  const prev = select.value;
-  select.innerHTML = "";
-
-  const all = document.createElement("option");
-  all.value = "all";
-  all.textContent = "all";
-  select.appendChild(all);
-
-  for (const value of values) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = value;
-    select.appendChild(option);
-  }
-  select.value = values.includes(prev) ? prev : "all";
-}
-
-function readFilters() {
-  return {
-    backend: byId("backendFilter")?.value || "all",
-    strategy: byId("strategyFilter")?.value || "all",
-    rerankerMode: byId("rerankerModeFilter")?.value || "all",
-    rerankerK: byId("rerankerKFilter")?.value || "all",
-    rerankerAlpha: byId("rerankerAlphaFilter")?.value || "all",
-    sortBy: byId("sortFilter")?.value || "composite_score",
-  };
-}
-
-function applyFilters() {
-  const { backend, strategy, rerankerMode, rerankerK, rerankerAlpha, sortBy } = readFilters();
-  let rows = [...state.rows];
-  if (backend !== "all") rows = rows.filter((row) => String(row.backend) === backend);
-  if (strategy !== "all") rows = rows.filter((row) => String(row.strategy) === strategy);
-  if (rerankerMode !== "all") {
-    if (rerankerMode === "on") rows = rows.filter((row) => toBool(row.reranker_enabled));
-    if (rerankerMode === "off") rows = rows.filter((row) => !toBool(row.reranker_enabled));
-  }
-  if (rerankerK !== "all") rows = rows.filter((row) => String(num(row.reranker_candidate_k)) === rerankerK);
-  if (rerankerAlpha !== "all") rows = rows.filter((row) => fixed(row.reranker_alpha, 2) === rerankerAlpha);
-
-  rows = rows.map((row) => ({ ...row, composite_score: compositeScore(row) }));
-  rows.sort((a, b) => {
-    if (sortBy === "avg_query_latency_ms") return num(a[sortBy]) - num(b[sortBy]);
-    return num(b[sortBy]) - num(a[sortBy]);
-  });
-
-  state.filtered = rows;
-  updateFilteredCount(rows);
-  renderTable(rows);
-  renderCharts(rows);
-  renderFindings(rows);
+function sortRowsForDisplay(rows) {
+  return [...rows]
+    .map((row) => ({ ...row, composite_score: compositeScore(row) }))
+    .sort((a, b) => num(b.composite_score) - num(a.composite_score));
 }
 
 function renderOverview(rows) {
@@ -333,16 +282,11 @@ function renderTable(rows) {
       <td>${badge(escapeHtml(row.backend))}</td>
       <td>${badge(escapeHtml(row.strategy))}</td>
       <td>${badge(row.reranker_enabled ? "on" : "off")}</td>
-      <td>${num(row.reranker_candidate_k).toFixed(0)}</td>
-      <td>${fixed(row.reranker_alpha, 2)}</td>
-      <td>${num(row.chunk_size).toFixed(0)}</td>
-      <td>${num(row.overlap).toFixed(0)}</td>
       <td>${num(row.top_k).toFixed(0)}</td>
       <td>${fixed(row.recall_at_k, 4)}</td>
       <td>${fixed(row.mrr, 4)}</td>
       <td>${fixed(row.f1, 4)}</td>
       <td>${fixed(row.avg_query_latency_ms, 3)}</td>
-      <td>${fixed(row.composite_score, 4)}</td>
     `;
     tbody.appendChild(tr);
   }
@@ -370,6 +314,19 @@ function aggregateRows(rows, xKey, yKey, seriesKeys) {
     grouped[series].sort((a, b) => a.x - b.x);
   }
   return grouped;
+}
+
+function pickBestRows(rows, groupKeys, scoreFn) {
+  const best = new Map();
+  for (const row of rows) {
+    const key = groupKeys.map((keyName) => String(row[keyName])).join("|");
+    const current = best.get(key);
+    const score = scoreFn(row);
+    if (!current || score > current.score) {
+      best.set(key, { row, score });
+    }
+  }
+  return Array.from(best.values(), (item) => item.row);
 }
 
 function prepareCanvas(canvas) {
@@ -401,7 +358,7 @@ function drawChart(canvasId, grouped, yLabel) {
   if (!points.length) {
     ctx.fillStyle = "#56716d";
     ctx.font = "14px Space Grotesk";
-    ctx.fillText("No rows after filter", 22, 40);
+    ctx.fillText("No experiment rows available", 22, 40);
     return;
   }
 
@@ -485,19 +442,99 @@ function drawChart(canvasId, grouped, yLabel) {
   }
 }
 
+function drawBarChart(canvasId, items, options) {
+  const canvas = byId(canvasId);
+  if (!canvas) return;
+  const { ctx, width, height } = prepareCanvas(canvas);
+  const pad = { l: 52, r: 18, t: 24, b: 54 };
+  ctx.clearRect(0, 0, width, height);
+
+  const cardGrad = ctx.createLinearGradient(0, 0, 0, height);
+  cardGrad.addColorStop(0, "#ffffff");
+  cardGrad.addColorStop(1, "#f7f9ff");
+  ctx.fillStyle = cardGrad;
+  ctx.fillRect(0, 0, width, height);
+
+  if (!items.length) {
+    ctx.fillStyle = "#56716d";
+    ctx.font = "14px Plus Jakarta Sans";
+    ctx.fillText("No experiment rows available", 22, 40);
+    return;
+  }
+
+  const values = items.map((item) => num(item.value));
+  const maxValue = Math.max(...values, 0.0001);
+  const chartHeight = height - pad.t - pad.b;
+  const chartWidth = width - pad.l - pad.r;
+  const barWidth = Math.min(110, chartWidth / Math.max(items.length * 1.6, 1));
+  const gap = (chartWidth - barWidth * items.length) / Math.max(items.length + 1, 1);
+
+  ctx.strokeStyle = "#d9e2f1";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i += 1) {
+    const y = pad.t + (chartHeight * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, y);
+    ctx.lineTo(width - pad.r, y);
+    ctx.stroke();
+    const tickValue = maxValue - (maxValue * i) / 4;
+    ctx.fillStyle = "#607a76";
+    ctx.font = "11px Plus Jakarta Sans";
+    ctx.fillText(tickValue.toFixed(options.decimals ?? 3), 6, y + 4);
+  }
+
+  items.forEach((item, index) => {
+    const x = pad.l + gap * (index + 1) + barWidth * index;
+    const barHeight = (num(item.value) / maxValue) * chartHeight;
+    const y = height - pad.b - barHeight;
+    const color = options.colors[index % options.colors.length];
+
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, barWidth, barHeight);
+
+    ctx.fillStyle = "#1e293b";
+    ctx.font = "12px Plus Jakarta Sans";
+    ctx.textAlign = "center";
+    ctx.fillText(num(item.value).toFixed(options.decimals ?? 3), x + barWidth / 2, y - 8);
+    ctx.fillText(item.label, x + barWidth / 2, height - pad.b + 18);
+
+    if (item.meta) {
+      ctx.fillStyle = "#64748b";
+      ctx.font = "11px Plus Jakarta Sans";
+      ctx.fillText(item.meta, x + barWidth / 2, height - pad.b + 34);
+    }
+  });
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#31504d";
+  ctx.font = "11px Plus Jakarta Sans";
+  ctx.fillText(options.yLabel, 8, 13);
+}
+
 function renderCharts(rows) {
-  const groupedRecall = aggregateRows(rows, "top_k", "recall_at_k", [
-    "backend",
-    "strategy",
-    "reranker_label",
-  ]);
+  const backendRows = pickBestRows(rows, ["backend", "top_k"], (row) => compositeScore(row));
+  const groupedRecall = aggregateRows(backendRows, "top_k", "recall_at_k", ["backend"]);
   drawChart("recallChart", groupedRecall, "recall@k");
-  const groupedMrr = aggregateRows(rows, "chunk_size", "mrr", [
-    "backend",
-    "strategy",
-    "reranker_label",
-  ]);
-  drawChart("mrrChart", groupedMrr, "mrr");
+
+  const highestTopK = Math.max(...rows.map((row) => num(row.top_k)), 0);
+  const highestTopKRows = rows.filter((row) => num(row.top_k) === highestTopK);
+  const metricKey = highestTopKRows.some((row) => num(row.f1) > 0) ? "f1" : "mrr";
+  const bestStrategyRows = pickBestRows(highestTopKRows, ["strategy"], (row) => compositeScore(row)).sort((a, b) =>
+    String(a.strategy).localeCompare(String(b.strategy))
+  );
+  drawBarChart(
+    "mrrChart",
+    bestStrategyRows.map((row) => ({
+      label: String(row.strategy),
+      value: num(row[metricKey]),
+      meta: `${fixed(row.avg_query_latency_ms, 3)} ms`,
+    })),
+    {
+      yLabel: metricKey,
+      decimals: metricKey === "f1" ? 4 : 3,
+      colors: ["#0f766e", "#7c3aed", "#ea580c", "#2563eb"],
+    }
+  );
 }
 
 function renderFindings(rows) {
@@ -508,30 +545,28 @@ function renderFindings(rows) {
   championGrid.innerHTML = "";
   insightList.innerHTML = "";
   if (!rows.length) {
-    insightList.innerHTML = "<li>No rows available after filtering.</li>";
+    insightList.innerHTML = "<li>No experiment rows are available.</li>";
     return;
   }
 
-  const byStrategy = new Map();
-  for (const row of rows) {
-    const key = String(row.strategy);
-    if (!byStrategy.has(key) || compositeScore(row) > compositeScore(byStrategy.get(key))) {
-      byStrategy.set(key, row);
-    }
-  }
+  const topRows = [...rows]
+    .sort((a, b) => num(b.composite_score) - num(a.composite_score))
+    .slice(0, 3);
 
-  for (const [strategy, row] of byStrategy.entries()) {
+  for (const row of topRows) {
     const card = document.createElement("article");
     card.className = "champion-card";
     card.innerHTML = `
       <header>
-        <h4>${escapeHtml(strategy)}</h4>
+        <h4>${escapeHtml(`${row.backend}/${row.strategy}`)}</h4>
         <span class="badge">${escapeHtml(row.backend)}</span>
       </header>
       <p>${escapeHtml(row.reranker_label)} | c${num(row.chunk_size).toFixed(0)} | o${num(row.overlap).toFixed(
       0
     )} | k${num(row.top_k).toFixed(0)}</p>
-      <p>Recall ${fixed(row.recall_at_k)} | MRR ${fixed(row.mrr)} | F1 ${fixed(row.f1)}</p>
+      <p>Recall ${fixed(row.recall_at_k)} | MRR ${fixed(row.mrr)} | F1 ${fixed(row.f1)} | Score ${fixed(
+      row.composite_score
+    )}</p>
     `;
     championGrid.appendChild(card);
   }
@@ -565,93 +600,18 @@ function renderFindings(rows) {
   }
 }
 
-function updateFilteredCount(rows) {
-  setText("filteredCount", `${rows.length} rows selected`);
-}
-
-function safeFileDateStamp() {
-  const now = new Date();
-  const y = String(now.getFullYear());
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
-  return `${y}${m}${d}_${hh}${mm}`;
-}
-
-function downloadBlob(filename, blobText, mimeType) {
-  const blob = new Blob([blobText], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function rowsToCsv(rows) {
-  const headers = [
-    "backend",
-    "strategy",
-    "reranker_enabled",
-    "reranker_type",
-    "reranker_candidate_k",
-    "reranker_alpha",
-    "reranker_label",
-    "chunk_size",
-    "overlap",
-    "top_k",
-    "recall_at_k",
-    "mrr",
-    "em",
-    "f1",
-    "avg_query_latency_ms",
-    "composite_score",
-  ];
-  const escapeCsv = (value) => {
-    const text = String(value ?? "");
-    if (/[",\n]/.test(text)) return `"${text.replaceAll('"', '""')}"`;
-    return text;
-  };
-  const lines = [headers.join(",")];
-  for (const row of rows) {
-    lines.push(headers.map((header) => escapeCsv(row[header])).join(","));
-  }
-  return lines.join("\n");
-}
-
-function exportFilteredRows(kind) {
-  const rows = state.filtered || [];
-  if (!rows.length) return;
-  const stamp = safeFileDateStamp();
-  if (kind === "csv") {
-    downloadBlob(`rag_chunking_filtered_${stamp}.csv`, rowsToCsv(rows), "text/csv;charset=utf-8");
-    return;
-  }
-  downloadBlob(
-    `rag_chunking_filtered_${stamp}.json`,
-    JSON.stringify(rows, null, 2),
-    "application/json;charset=utf-8"
+function updateResultsSummary(rows) {
+  const denseCount = rows.filter((row) => String(row.backend) === "dense").length;
+  const bm25Count = rows.filter((row) => String(row.backend) === "bm25").length;
+  const strategyCount = new Set(rows.map((row) => String(row.strategy))).size;
+  setText(
+    "resultsSummary",
+    `${rows.length} runs loaded across ${strategyCount} chunking strategies. Dense: ${denseCount} | BM25: ${bm25Count}.`
   );
 }
 
 function attachEvents() {
-  [
-    "backendFilter",
-    "strategyFilter",
-    "rerankerModeFilter",
-    "rerankerKFilter",
-    "rerankerAlphaFilter",
-    "sortFilter",
-  ].forEach((id) => {
-    const node = byId(id);
-    if (node) node.addEventListener("change", applyFilters);
-  });
-  byId("exportCsvBtn")?.addEventListener("click", () => exportFilteredRows("csv"));
-  byId("exportJsonBtn")?.addEventListener("click", () => exportFilteredRows("json"));
-  window.addEventListener("resize", () => renderCharts(state.filtered));
+  window.addEventListener("resize", () => renderCharts(state.rows));
 }
 
 async function init() {
@@ -665,20 +625,9 @@ async function init() {
 
     state.metrics = metrics.payload || {};
     const mergedRows = mergeMatrixRows(matrixFiles);
-    state.rows = mergedRows.map((row) => ({
-      ...row,
-      composite_score: compositeScore(row),
-    }));
+    state.rows = sortRowsForDisplay(mergedRows);
 
     const backends = [...new Set(state.rows.map((row) => String(row.backend)))].filter(Boolean);
-    const strategies = [...new Set(state.rows.map((row) => String(row.strategy)))].filter(Boolean);
-    const rerankerKs = [...new Set(state.rows.map((row) => String(num(row.reranker_candidate_k))))].filter(Boolean);
-    const rerankerAlphas = [...new Set(state.rows.map((row) => fixed(row.reranker_alpha, 2)))].filter(Boolean);
-    populateSelect("backendFilter", backends);
-    populateSelect("strategyFilter", strategies);
-    populateSelect("rerankerModeFilter", ["off", "on"]);
-    populateSelect("rerankerKFilter", rerankerKs.sort((a, b) => num(a) - num(b)));
-    populateSelect("rerankerAlphaFilter", rerankerAlphas.sort((a, b) => num(a) - num(b)));
 
     setStatus("status-ok", "Ready");
     setText("metricsSource", metrics.path);
@@ -690,10 +639,13 @@ async function init() {
     setText("uniqueBackends", backends.join(", ") || "-");
 
     renderOverview(state.rows);
-    applyFilters();
+    updateResultsSummary(state.rows);
+    renderTable(state.rows);
+    renderCharts(state.rows);
+    renderFindings(state.rows);
     attachEvents();
     setHidden("overviewSkeleton", true);
-    setNotice("overviewNotice", "is-success", "Overview ready. Filters and charts are synced.");
+    setNotice("overviewNotice", "is-success", "Overview ready. Complete results are shown automatically.");
   } catch (err) {
     console.error(err);
     setStatus("status-err", "Load failed");

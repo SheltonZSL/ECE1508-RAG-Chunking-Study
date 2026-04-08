@@ -1,3 +1,8 @@
+const demoState = {
+  defaultBackend: "bm25",
+  defaultStrategy: "fixed",
+};
+
 function byId(id) {
   return document.getElementById(id);
 }
@@ -121,6 +126,7 @@ function setSelectOptions(id, values, selectedValue) {
   if (selectedValue && (values || []).includes(selectedValue)) {
     select.value = selectedValue;
   }
+  select.disabled = (values || []).length <= 1;
 }
 
 function renderSettingsBadges(settings, wrapId = "settingsBadges") {
@@ -246,8 +252,8 @@ function buildPayloadFromInputs(suffix = "") {
   const rerankerAlpha = Math.max(0, Math.min(1, numFloat(`rerankerAlphaInput${suffix}`, 0.5)));
   return {
     question,
-    backend: byId(`backendInput${suffix}`)?.value || "dense",
-    strategy: byId(`strategyInput${suffix}`)?.value || "fixed",
+    backend: byId(`backendInput${suffix}`)?.value || demoState.defaultBackend,
+    strategy: demoState.defaultStrategy,
     chunk_size: num(`chunkSizeInput${suffix}`, 256),
     overlap: num(`overlapInput${suffix}`, 32),
     top_k: topK,
@@ -291,14 +297,14 @@ async function bootstrap() {
       const opts = payload.options || {};
       const defs = payload.defaults || {};
       const backends = opts.backends || ["dense", "bm25"];
-      const strategies = opts.strategies || ["fixed", "structure", "adaptive"];
       const rerankerEnableds = opts.reranker_enableds || [false, true];
       const rerankerTypes = opts.reranker_types || ["overlap"];
 
+      demoState.defaultBackend = defs.backend || backends[0] || "bm25";
+      demoState.defaultStrategy = defs.strategy || "fixed";
+
       setSelectOptions("backendInput", backends, defs.backend);
-      setSelectOptions("strategyInput", strategies, defs.strategy);
       setSelectOptions("backendInputB", backends, backends.length > 1 ? backends[1] : defs.backend);
-      setSelectOptions("strategyInputB", strategies, defs.strategy);
       setSelectOptions(
         "rerankerEnabledInput",
         rerankerEnableds.map((value) => String(Boolean(value))),
@@ -329,9 +335,18 @@ async function bootstrap() {
       if (byId("rerankerAlphaInputB")) byId("rerankerAlphaInputB").value = defs.reranker_alpha ?? 0.5;
 
       if (byId("configInput")) byId("configInput").value = payload.config_path || "configs/portable_interactive.yaml";
+      const generationAvailable = Boolean(defs.with_generation);
+      if (byId("generateInput")) {
+        byId("generateInput").checked = generationAvailable;
+        byId("generateInput").disabled = !generationAvailable;
+      }
+      if (byId("generateLabel")) {
+        byId("generateLabel").textContent = generationAvailable
+          ? "Run answer generation (Flan-T5) in addition to retrieval."
+          : "Answer generation is unavailable for the active config. Retrieval-only demo mode is enabled.";
+      }
       text("activeConfig", payload.config_path || "-");
       text("availableBackends", backends.join(", ") || "-");
-      text("availableStrategies", strategies.join(", ") || "-");
       const rerankerModesLabel = rerankerEnableds.some((value) => Boolean(value)) ? "off/on" : "off";
       text("availableRerankers", `${rerankerModesLabel} | ${rerankerTypes.join(", ") || "overlap"}`);
       syncTopKCandidateGuard("");
@@ -345,7 +360,6 @@ async function bootstrap() {
   } catch {
     text("activeConfig", "Unavailable");
     text("availableBackends", "-");
-    text("availableStrategies", "-");
     text("availableRerankers", "-");
     setNotice("is-error", "Failed to load defaults. Check backend service.");
   }

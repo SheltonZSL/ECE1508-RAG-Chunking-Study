@@ -40,14 +40,13 @@ eval:
   compute_efficiency: true
 
 run:
-  experiment_name: portable_interactive
+  experiment_name: portable_interactive_v2
   seed: 42
   save_predictions: true
   results_dir: results
   matrix:
     backends: [bm25]
     strategies: [fixed]
-    chunk_sizes: [80]
-    overlaps: [12]
-    top_ks: [5]
-
+    chunk_sizes: [80, 120, 160]
+    overlaps: [0, 12, 24]
+    top_ks: [3, 5, 10]

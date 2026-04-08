@@ -35,7 +35,6 @@
           <dl class="service-list">
             <dt>Config</dt><dd id="activeConfig">-</dd>
             <dt>Backends</dt><dd id="availableBackends">-</dd>
-            <dt>Strategies</dt><dd id="availableStrategies">-</dd>
             <dt>Reranker</dt><dd id="availableRerankers">-</dd>
           </dl>
         </div>
@@ -81,15 +80,6 @@
               <select id="backendInput">
                 <option value="dense">dense</option>
                 <option value="bm25">bm25</option>
-              </select>
-            </label>
-
-            <label>
-              Chunking Strategy
-              <select id="strategyInput">
-                <option value="fixed">fixed</option>
-                <option value="structure">structure</option>
-                <option value="adaptive">adaptive</option>
               </select>
             </label>
 
@@ -149,14 +139,6 @@
                     </select>
                   </label>
                   <label>
-                    Strategy B
-                    <select id="strategyInputB">
-                      <option value="fixed">fixed</option>
-                      <option value="structure">structure</option>
-                      <option value="adaptive">adaptive</option>
-                    </select>
-                  </label>
-                  <label>
                     Chunk Size B
                     <input id="chunkSizeInputB" type="number" min="32" max="1024" value="256">
                   </label>
@@ -200,7 +182,7 @@
 
             <label class="checkbox wide">
               <input id="generateInput" type="checkbox" checked>
-              Run answer generation (Flan-T5) in addition to retrieval.
+              <span id="generateLabel">Run answer generation (Flan-T5) in addition to retrieval.</span>
             </label>
 
             <div class="form-actions wide">

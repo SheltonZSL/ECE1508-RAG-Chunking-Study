@@ -33,20 +33,28 @@ Current lite-run highlights from repository artifacts:
 
 ## 4) Visualization and Interactive Demo
 This project includes built-in visualization and interactive inspection:
-- dashboard overview: `/dashboard/`
-- live QA console: `/dashboard/demo.html`
+- dashboard overview: `/dashboard/` for an automatic full-results overview
+- live QA console: `/dashboard/demo.html` for a simplified local QA demo
 - plotting/report scripts: `scripts/plot_results.py`, `scripts/plot_sensitivity.py`, `scripts/build_final_report.py`
 
-### Visualization Preview
-#### Retrieval Trend (Dense)
-![Recall vs Top-k (Dense)](docs/assets/recall_vs_topk_dense.png)
+Dashboard behavior:
+- `/dashboard/` automatically loads and presents the complete experiment matrix without manual parameter selection
+- `/dashboard/demo.html` is intentionally simplified for presentation and focuses on lightweight BM25-based local interaction
 
-#### Reranker Ablation
-![Reranker Ablation Scatter](docs/assets/reranker_ablation_scatter.png)
+### Visualization Preview
+#### Backend Scaling
+![Backend Scaling](docs/assets/backend_topk_scaling.png)
+
+#### Chunking Strategy Comparison
+![BM25 Strategy Comparison](docs/assets/bm25_strategy_comparison.png)
+
+#### Reranker Tradeoff
+![Reranker Tradeoff](docs/assets/reranker_tradeoff.png)
 
 ### What the charts indicate
-- **Recall vs Top-k (Dense):** expanding top-k improves coverage, but latency also grows, showing a clear retrieval quality vs efficiency tradeoff.
-- **Reranker ablation scatter:** reranker settings can improve `F1` at moderate latency cost, but gains are configuration-sensitive and may not improve every retrieval metric simultaneously.
+- **Backend scaling:** Dense retrieval consistently achieves higher recall than BM25 as `top_k` increases, but it also incurs higher latency. This captures the central quality-efficiency tradeoff in the pipeline.
+- **Chunking strategy comparison:** in the lite BM25 matrix at `top_k=10`, the three chunking strategies produce similar retrieval quality, but they differ in `F1` and latency, showing that chunking still matters even when the backend is fixed.
+- **Reranker tradeoff:** the reranker does not produce uniform gains. The best lite setting (`candidate_k=10`, `alpha=0.20`) improves `F1` while adding only a modest latency increase, which makes the tradeoff interpretable rather than purely anecdotal.
 
 ## 5) Why This Fits Applied Deep Learning
 This project aligns with an Applied Deep Learning course because it applies pretrained deep models in a real evaluation workflow and analyzes practical design tradeoffs:
@@ -114,6 +122,11 @@ Open:
 - `http://127.0.0.1:8000/dashboard/`
 - `http://127.0.0.1:8000/dashboard/demo.html`
 
+Notes:
+- the dashboard overview loads the complete stored experiment results automatically
+- the live demo is a lightweight local interface for retrieval inspection on the bundled demo corpus
+- portable mode is optimized for low-friction presentation rather than full research control
+
 ### B) Full Experiment Mode (lite baseline recommended)
 ```bash
 python scripts/setup_full.py
@@ -126,7 +139,7 @@ python scripts/setup_full.py --serve --open
 ```
 
 ## 10) Configuration Files
-- `configs/portable_interactive.yaml`: lightweight interactive mode with bundled local demo corpus
+- `configs/portable_interactive.yaml`: lightweight BM25 interactive mode with bundled local demo corpus and simplified dashboard/demo presentation
 - `configs/baseline_lite.yaml`: recommended reproducibility baseline
 - `configs/baseline_lite_bm25_only.yaml`: BM25-only matrix on lite corpus
 - `configs/baseline_lite_reranker.yaml`: lite matrix with reranker enabled
@@ -163,6 +176,7 @@ python scripts/analyze_reranker_ablation.py --matrix-summary results/reranker_ab
 ```bash
 python scripts/build_final_report.py [--results-dir results] [--out-dir results/analysis]
 python scripts/plot_sensitivity.py --matrix-summary <summary_json_or_list...> [--out-dir results/analysis/sensitivity]
+python scripts/build_readme_figures.py
 python scripts/organize_results.py
 ```
 
