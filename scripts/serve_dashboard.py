@@ -99,11 +99,12 @@ def _resolve_config_path(raw: str, base_config_path: str) -> str:
         if not candidate.exists():
             raise FileNotFoundError(f"Config file not found: {candidate}")
         return str(candidate)
-    root_resolved = ROOT.resolve()
+
+    configs_root = (ROOT / "configs").resolve()
     try:
-        candidate.relative_to(root_resolved)
+        candidate.relative_to(configs_root)
     except ValueError as exc:
-        raise ValueError("Config path must stay within repository root.") from exc
+        raise ValueError("Config path must stay within the repository configs directory.") from exc
     if candidate.suffix.lower() not in {".yaml", ".yml"}:
         raise ValueError("Config file must be .yaml or .yml")
     if not candidate.exists():
